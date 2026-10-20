@@ -27,7 +27,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from dupsweeper_i18n import T, set_language, get_language
 
-from dupsweeper_engine import (Group, Result, FileInfo, child_worker, choose_keeper, smart_marks,
+from dupsweeper_engine import (Group, Result, FileInfo, child_worker, choose_keeper, smart_marks, filtered_result,
                               file_kind, norm, inside_folder, inside_any_folder, protected, snapshot, ffmpeg_exe)
 from dupsweeper_history import HistoryStore, storage_path
 try:
@@ -60,12 +60,14 @@ def stats_string(x, q):
 class App:
     def __init__(self,root):
         self.root=root
-        root.title(T('DupSweeper v1.2.0｜重複檔案整理'))
-        root.geometry('1320x860')
+        root.title(T('DupSweeper v1.3.0｜重複檔案整理'))
+        root.geometry('1570x910')
         root.minsize(900,780)
         self.paths=[]
         self.preferred_paths=self._load_preferences()
+        self.excluded_paths=self._load_excluded()
         self.result=None
+        self.raw_result=None
         self.marks=set()
         self.ctx=mp.get_context('spawn')
         self.proc=None
@@ -80,7 +82,7 @@ class App:
         self.dirty=False
         self.view_limit=200
         self._build()
-        self.root.after(120,self._poll)
+        self._poll_after=self.root.after(120,self._poll)
         self.root.protocol('WM_DELETE_WINDOW',self._quit)
 
     def _init_theme(self):
@@ -160,7 +162,7 @@ class App:
         header.columnconfigure(0,weight=1)
         ttk.Label(header,text='DupSweeper',style='Header.TLabel').grid(row=0,column=0,sticky='w')
         ttk.Label(header,text=T('找重複、選保留、確認後移除'),style='Muted.TLabel').grid(row=1,column=0,sticky='w')
-        ttk.Label(header,text=T('v1.2.0 · 本機處理'),style='Muted.TLabel').grid(row=0,column=1,sticky='e')
+        ttk.Label(header,text=T('v1.3.0 · 本機處理'),style='Muted.TLabel').grid(row=0,column=1,sticky='e')
         tools=ttk.Frame(main,style='Base.TFrame')
         tools.grid(row=1,column=0,sticky='ew',pady=(0,9))
         self.history_btn=ttk.Button(tools,text=T('歷史快速檢查'),command=self._start_history)
@@ -189,7 +191,7 @@ class App:
         settings.grid(row=0,column=0,sticky='ew')
         self.tabbar=ttk.Frame(self.workspace,style='Base.TFrame')
         self.card_tabs=[]
-        for i,name in enumerate((T('掃描位置'),T('優先保留'),T('相似媒體'))):
+        for i,name in enumerate((T('掃描位置'),T('優先保留'),T('排除資料夾'),T('相似媒體'))):
             btn=ttk.Button(self.tabbar,text=name,command=lambda k=i:self._select_card(k))
             btn.grid(row=0,column=i,sticky='ew',padx=(0,8))
             self.tabbar.columnconfigure(i,weight=1)
@@ -229,6 +231,28 @@ class App:
             b.grid(row=1,column=j,sticky='ew',padx=(0,4) if j<2 else 0)
         ttk.Label(pref,text=T('優先保留這些位置中較好的版本。'),
                   style='PanelMuted.TLabel',wraplength=360).grid(row=2,column=0,columnspan=3,sticky='w',pady=(8,0))
+
+        excludes=ttk.LabelFrame(settings,text=T('排除資料夾／白名單'),padding=(9,8),style='Panel.TLabelframe')
+        self.excludes_frame=excludes
+        excludes.columnconfigure(0,weight=1)
+        self.excluded_list=tk.Listbox(excludes,height=3,selectmode='extended',exportselection=False,
+                  relief='flat',highlightthickness=1,highlightbackground=c['line'],
+                  bg=c['bg'],fg=c['text'],selectbackground=c['lavender'],selectforeground=c['text'])
+        self.excluded_list.grid(row=0,column=0,columnspan=3,sticky='ew',pady=(0,7))
+        for folder in self.excluded_paths:self.excluded_list.insert('end',folder)
+        self.exclude_add=ttk.Button(excludes,text=T('+ 加入'),command=self._add_exclusion)
+        self.exclude_remove=ttk.Button(excludes,text=T('移除'),command=self._remove_exclusion)
+        self.exclude_clear=ttk.Button(excludes,text=T('清空'),command=lambda:self._update_exclusions([]))
+        for j,b in enumerate((self.exclude_add,self.exclude_remove,self.exclude_clear)):
+            excludes.columnconfigure(j,weight=1)
+            b.grid(row=1,column=j,sticky='ew',padx=(0,4) if j<2 else 0)
+        self.skip_excluded=tk.BooleanVar(value=self._load_skip_excluded())
+        self.exclusion_skip_check=ttk.Checkbutton(excludes,style='TickBox.TCheckbutton',
+            text=T('掃描前略過排除資料夾'),variable=self.skip_excluded,command=self._exclusions_changed)
+        self.exclusion_skip_check.grid(row=2,column=0,columnspan=3,sticky='w',pady=(5,0))
+        self.exclude_hint=ttk.Label(excludes,style='PanelMuted.TLabel',wraplength=300,
+            text=T('排除資料夾及子資料夾不會出現在結果，也不會被智慧選取。取消上方勾選可全碟掃描後再隱藏。'))
+        self.exclude_hint.grid(row=3,column=0,columnspan=3,sticky='w',pady=(5,0))
 
         opts=ttk.LabelFrame(settings,text=T('相似照片與影片'),padding=(9,8),style='Panel.TLabelframe')
         self.opts_frame=opts
@@ -332,7 +356,7 @@ class App:
     def _select_card(self,index):
         self.active_card=index
         if getattr(self,'_compact',False):
-            for i,frame in enumerate((self.folder_frame,self.pref_frame,self.opts_frame)):
+            for i,frame in enumerate((self.folder_frame,self.pref_frame,self.excludes_frame,self.opts_frame)):
                 if i==index:
                     frame.grid(row=0,column=0,sticky='nsew')
                 else:
@@ -343,12 +367,12 @@ class App:
     def _adapt_layout(self,width):
         # Width adapts without ANY settings scroll bar: cards when wide,
         # one clearly labelled tab per group when compact.
-        compact=width<1120
+        compact=width<1510
         if getattr(self,'_compact',None) != compact:
             self._compact=compact
-            for item in (self.folder_frame,self.pref_frame,self.opts_frame):
+            for item in (self.folder_frame,self.pref_frame,self.excludes_frame,self.opts_frame):
                 item.grid_forget()
-            for i in range(3):self.settings_inner.columnconfigure(i,weight=0)
+            for i in range(4):self.settings_inner.columnconfigure(i,weight=0)
             self.tabbar.grid_forget()
             self._layout_media_options(compact)
             self.workspace.rowconfigure(1,weight=0)
@@ -356,6 +380,7 @@ class App:
             if compact:
                 self.folders.configure(height=2)
                 self.preferred_list.configure(height=2)
+                self.excluded_list.configure(height=2)
                 self.tabbar.grid(row=0,column=0,sticky='ew',pady=(0,7))
                 self.settings_inner.grid_configure(row=1,column=0)
                 self.results_panel.grid_configure(row=2,column=0)
@@ -365,14 +390,16 @@ class App:
             else:
                 self.folders.configure(height=3)
                 self.preferred_list.configure(height=3)
+                self.excluded_list.configure(height=3)
                 self.settings_inner.grid_configure(row=0,column=0)
                 self.results_panel.grid_configure(row=1,column=0)
                 self.workspace.rowconfigure(1,weight=1)
                 self.settings_inner.columnconfigure(0,weight=1)
                 self.settings_inner.columnconfigure(1,weight=1)
                 self.settings_inner.columnconfigure(2,weight=1)
-                for i,frame in enumerate((self.folder_frame,self.pref_frame,self.opts_frame)):
-                    frame.grid(row=0,column=i,sticky='nsew',padx=(0,10) if i<2 else 0)
+                self.settings_inner.columnconfigure(3,weight=1)
+                for i,frame in enumerate((self.folder_frame,self.pref_frame,self.excludes_frame,self.opts_frame)):
+                    frame.grid(row=0,column=i,sticky='nsew',padx=(0,10) if i<3 else 0)
         tiny=width<920
         if getattr(self,'_tiny',None)!=tiny:
             self._tiny=tiny
@@ -389,7 +416,7 @@ class App:
 
     def _toggle_settings(self):
         # Backwards-compatible entry point for former UI automation.
-        self._select_card((self.active_card+1)%3)
+        self._select_card((self.active_card+1)%4)
 
     def _sync_settings_visible(self):
         pass
@@ -402,6 +429,53 @@ class App:
             return list(dict.fromkeys(os.path.abspath(p) for p in items if isinstance(p,str) and p))
         except (OSError, ValueError, TypeError):
             return []
+
+    def _load_excluded(self):
+        try:
+            with open(os.path.join(os.path.dirname(storage_path()),'settings.json'),encoding='utf-8') as f:
+                data=json.load(f)
+            return list(dict.fromkeys(os.path.abspath(p) for p in data.get('excluded_folders',[])
+                                      if isinstance(p,str) and p))
+        except (OSError,ValueError,TypeError):return []
+
+    def _load_skip_excluded(self):
+        try:
+            with open(os.path.join(os.path.dirname(storage_path()),'settings.json'),encoding='utf-8') as f:
+                return json.load(f).get('skip_excluded_on_scan',True) is True
+        except (OSError,ValueError,TypeError):return True
+
+    def _scan_exclusions(self):
+        return list(self.excluded_paths) if self.skip_excluded.get() else []
+
+    def _view_with_exclusions(self):
+        self.marks.clear()
+        if self.raw_result is not None:
+            self.result=filtered_result(self.raw_result,self.excluded_paths)
+        if hasattr(self,'tree'):
+            self._render()
+
+    def _exclusions_changed(self):
+        self._save_preference()
+        self._view_with_exclusions()
+        if self.raw_result is not None:
+            self.progress_var.set(T('排除範圍已更新，先前標記已清空；歷史比對須使用相同的掃描排除設定。'))
+
+    def _update_exclusions(self,paths):
+        paths=list(dict.fromkeys(os.path.abspath(p) for p in paths if p))
+        if paths==self.excluded_paths:return
+        self.excluded_paths=paths
+        self.excluded_list.delete(0,'end')
+        for path in paths:self.excluded_list.insert('end',path)
+        self._exclusions_changed()
+
+    def _add_exclusion(self):
+        folder=filedialog.askdirectory(title=T('加入排除資料夾'),mustexist=True)
+        if folder and norm(folder) not in {norm(x) for x in self.excluded_paths}:
+            self._update_exclusions(self.excluded_paths+[folder])
+
+    def _remove_exclusion(self):
+        selected=set(self.excluded_list.curselection())
+        if selected:self._update_exclusions([p for i,p in enumerate(self.excluded_paths) if i not in selected])
 
     def _load_media_setting(self):
         try:
@@ -434,6 +508,8 @@ class App:
             os.makedirs(os.path.dirname(path),exist_ok=True)
             with open(path,'w',encoding='utf-8') as f:
                 json.dump({'preferred_folders':self.preferred_paths,
+                           'excluded_folders':getattr(self,'excluded_paths',[]),
+                           'skip_excluded_on_scan':self.skip_excluded.get() if hasattr(self,'skip_excluded') else True,
                            'media_enabled':bool(self.media_opt.get()) if hasattr(self,'media_opt') else False,
                            'smart_similar_photo':bool(self.trust_photo.get()) if hasattr(self,'trust_photo') else False,
                            'smart_similar_video':bool(self.trust_video.get()) if hasattr(self,'trust_video') else False},
@@ -484,7 +560,7 @@ class App:
         tree.pack(fill='both',expand=True)
         for i,item in enumerate(items):
             tree.insert('','end',iid=str(i),values=(item['created'],T('有') if item['media'] else T('無'),
-                   T('有') if item.get('media_resumed_at') else T('無'),item['count'],item['groups'],'；'.join(item['roots'])))
+                   T('有') if item.get('media_resumed_at') else T('無'),item['count'],item['groups'],'；'.join(item['roots'])+(T('｜排除：')+'；'.join(item['excluded']) if item.get('excluded') else '')))
         def load_old(and_resume=False):
             chosen=tree.selection()
             if not chosen:
@@ -495,6 +571,9 @@ class App:
                 messagebox.showwarning(T('有掃描路徑不存在'),'\n'.join(missing)+T('\n請確認磁碟已連接且磁碟代號沒有變更。'),parent=w)
                 return
             self.paths=list(old['roots'])
+            self._update_exclusions(old.get('excluded',[]))
+            self.skip_excluded.set(True)
+            self._save_preference()
             self.folders.delete(0,'end')
             for folder in self.paths:self.folders.insert('end',folder)
             self.media_opt.set(True)
@@ -526,7 +605,8 @@ class App:
     def _setbusy(self,busy,mode=None):
         self.mode=mode if busy else None
         for x in [self.folder_add,self.folder_remove,self.folder_clear,self.pref_add,self.pref_remove,
-                  self.pref_clear,self.scan,self.history_btn,self.resume_btn,self.history_view,self.smart,
+                  self.pref_clear,self.exclude_add,self.exclude_remove,self.exclude_clear,self.exclusion_skip_check,
+                  self.scan,self.history_btn,self.resume_btn,self.history_view,self.smart,
                   self.mark,self.unmark,self.trash,self.csv_btn]:
             x.configure(state='disabled' if busy else 'normal')
         self.stop.configure(state='normal' if busy else 'disabled')
@@ -549,10 +629,11 @@ class App:
             messagebox.showinfo(T('尚未指定掃描位置'),T('請先加入至少一個資料夾或硬碟。'))
             return
         self.result=None
+        self.raw_result=None
         self.marks.clear()
         self._render()
         self.progress_var.set(T('完整重新掃描：不讀取歷史紀錄與 SHA 快取，檢查範圍內所有可存取檔案。'))
-        self._launch('scan',(roots,self.media_opt.get(),True))
+        self._launch('scan',(roots,self.media_opt.get(),True,self._scan_exclusions()))
 
     def _start_media_resume(self):
         roots=[x for x in self.paths if os.path.isdir(x)]
@@ -560,7 +641,7 @@ class App:
             messagebox.showinfo(T('尚未設定掃描位置'),T('請先選擇有完整掃描歷史的資料夾。'))
             return
         try:
-            with HistoryStore() as store: store.load_latest_scan(roots)
+            with HistoryStore() as store: store.load_latest_scan(roots,self._scan_exclusions())
         except Exception as exc:
             messagebox.showwarning(T('尚無符合的歷史紀錄'),T(str(exc)));return
         if not messagebox.askyesno(T('補做上次跳過的相似分析'),
@@ -570,10 +651,11 @@ class App:
         self.media_opt.set(True)
         self._save_preference()
         self.result=None
+        self.raw_result=None
         self.marks.clear()
         self._render()
         self.progress_var.set(T('正讀取本版歷史，補掃原磁碟中的照片／影片；可強制停止。'))
-        self._launch('media_resume',(roots,True))
+        self._launch('media_resume',(roots,True,self._scan_exclusions()))
 
     def _start_history(self):
         roots=[x for x in self.paths if os.path.isdir(x)]
@@ -581,10 +663,11 @@ class App:
             messagebox.showinfo(T('尚未指定掃描位置'),T('請先加入至少一個資料夾或硬碟。'))
             return
         self.result=None
+        self.raw_result=None
         self.marks.clear()
         self._render()
         self.progress_var.set(T('歷史檢查只核對已記錄群組；要補做先前未完成的照片／影片分析，請選擇補做相似比對。'))
-        self._launch('history',(roots,self.media_opt.get()))
+        self._launch('history',(roots,self.media_opt.get(),self._scan_exclusions()))
 
     def _soft_stop(self):
         if self.mode:
@@ -607,6 +690,7 @@ class App:
         self._finished()
         if old=='trash':
             self.result=None
+            self.raw_result=None
             self.marks.clear()
             self._render()
             self.progress_var.set(T('已強制停止移動程序；狀態可能部分更新，請重新掃描。'))
@@ -644,7 +728,8 @@ class App:
                     elif kind=='done_scan':
                         was_history=self.mode=='history'
                         was_resume=self.mode=='media_resume'
-                        self.result=args[0]
+                        self.raw_result=args[0]
+                        self.result=filtered_result(self.raw_result,self.excluded_paths)
                         self.marks.clear()
                         if was_history or was_resume:
                             self.marks=smart_marks(self.result,self.preferred_paths,False)
@@ -674,6 +759,7 @@ class App:
                         removed,failures=args
                         self._finished()
                         self.result=None
+                        self.raw_result=None
                         self.marks.clear()
                         self._render()
                         self.progress_var.set(T(f'已移至回收桶 {len(removed)} 份，失敗 {len(failures)} 份。為防止結果過期，請重新掃描。'))
@@ -697,7 +783,7 @@ class App:
                         self.progress_var.set(T('背景工作異常結束；如有移動操作，請重新掃描。'))
                 else: self.dead_ticks=0
         finally:
-            if self.root.winfo_exists(): self.root.after(130,self._poll)
+            if self.root.winfo_exists(): self._poll_after=self.root.after(130,self._poll)
 
     def _schedule_filter(self):
         self.view_limit=200
@@ -773,6 +859,8 @@ class App:
         self.marked_label.set(T(f'待移除：{len(self.marks)} 份｜{readable(sum(unique.values()))}'))
 
     def _eligible(self,g,x):
+        if inside_any_folder(x.path,getattr(self,'excluded_paths',[])):
+            return False,T('已排除的資料夾不可標記移除。')
         if protected(x.path): return False,T('系統或程式資料夾不允許刪除。')
         if g.kind=='same_name': return False,T('同名不同內容只是警示，不能作為移除依據。')
         if g.kind.startswith('similar') and not (self._trusted_similar(g.kind) or self.allow_near.get()):
@@ -814,6 +902,7 @@ class App:
         if self.trust_photo.get():allowed.add('similar_photo')
         if self.trust_video.get():allowed.add('similar_video')
         marks=smart_marks(self.result,self.preferred_paths,near_kinds=allowed)
+        marks={path for path in marks if not inside_any_folder(path,getattr(self,'excluded_paths',[]))}
         self.marks=marks
         self._refresh()
         types=[]
@@ -834,6 +923,8 @@ class App:
         for path in sorted(self.marks):
             x=files.get(path)
             if not x: return None
+            if inside_any_folder(x.path,getattr(self,'excluded_paths',[])):
+                raise ValueError(T('禁止移除排除資料夾內的檔案：')+path)
             if protected(x.path): raise ValueError(T('禁止移除系統位置：')+path)
             g=exact.get(path)
             if g:
@@ -849,6 +940,10 @@ class App:
                 if not available: raise ValueError(T('相似媒體群組必須至少保留一份：')+path)
                 keeper=choose_keeper(available,self.result.qualities,self.preferred_paths)
                 result.append((x,keeper,g.kind,''))
+        # Excluded files must not be used as keepers in any removal plan.
+        for x,keeper,kind,digest in result:
+            if inside_any_folder(keeper.path,getattr(self,'excluded_paths',[])):
+                raise ValueError(T('排除資料夾不能作為保留版本：')+keeper.path)
         # Extra precaution: all shared group memberships must retain one file.
         for g in self.result.groups:
             if g.kind=='same_name':continue
@@ -883,7 +978,7 @@ class App:
                 '若已自行確認內容，請輸入：確認相似'),parent=self.root)
             if phrase!=T('確認相似'):return
         self.progress_var.set(T('準備重新驗證檔案並移至回收桶…'))
-        self._launch('trash',plan)
+        self._launch('trash',(plan,list(getattr(self,'excluded_paths',[]))))
 
     def _selected(self):
         unique={}
@@ -940,6 +1035,9 @@ class App:
                 self.proc.terminate()
                 self.proc.join(timeout=1.0)
                 if self.proc.is_alive(): self.proc.kill()
+        if getattr(self,'_poll_after',None):
+            try:self.root.after_cancel(self._poll_after)
+            except tk.TclError: pass
         self.root.destroy()
 
 

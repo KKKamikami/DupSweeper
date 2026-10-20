@@ -46,6 +46,21 @@ _TRANSLATIONS.update({
         'Pillow is missing. Install it and retry.',
 })
 
+_TRANSLATIONS.update({
+    '排除資料夾': 'Excluded Folders',
+    '｜排除：': ' | skipped: ',
+    '排除資料夾／白名單': 'Excluded folders / Allowlist',
+    '掃描前略過排除資料夾': 'Skip excluded folders during scan',
+    '排除資料夾及子資料夾不會出現在結果，也不會被智慧選取。取消上方勾選可全碟掃描後再隱藏。':
+        'Excluded folders and subfolders never appear in results or Smart Select. Uncheck to scan everything but hide excluded paths afterward.',
+    '加入排除資料夾': 'Add an excluded folder',
+    '排除範圍已更新，先前標記已清空；歷史比對須使用相同的掃描排除設定。':
+        'Exclusions updated. Marks cleared. Quick History Check requires matching scan exclusions.',
+    '已排除的資料夾不可標記移除。': 'Excluded files cannot be marked for removal.',
+    '禁止移除排除資料夾內的檔案：': 'Cannot remove a file within an excluded folder: ',
+    '排除資料夾不能作為保留版本：': 'An excluded folder cannot be used as the retained copy: ',
+})
+
 def set_language(code):
     global _LANGUAGE
     _LANGUAGE = 'en' if str(code).lower().startswith('en') else 'zh-TW'

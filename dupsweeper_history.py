@@ -30,10 +30,11 @@ def storage_path():
     return os.path.join(base, 'DupSweeper', 'scan_history.sqlite3')
 
 
-def scope_key(roots, use_media):
+def scope_key(roots, use_media, excluded_folders=()):
     import hashlib
     paths = sorted({os.path.normcase(os.path.abspath(p)) for p in roots})
-    scope = json.dumps([paths, bool(use_media)], ensure_ascii=False)
+    excluded = sorted({os.path.normcase(os.path.abspath(p)) for p in excluded_folders})
+    scope = json.dumps([paths, bool(use_media)] + ([excluded] if excluded else []), ensure_ascii=False)
     return hashlib.sha256(scope.encode('utf-8')).hexdigest()
 
 
@@ -55,13 +56,16 @@ class HistoryStore:
             scope TEXT PRIMARY KEY, created REAL NOT NULL,
             base_created REAL NOT NULL, base_media INTEGER NOT NULL,
             payload BLOB NOT NULL)''')
+        cols={r[1] for r in self.db.execute('PRAGMA table_info(scans)')}
+        if 'excluded' not in cols:
+            self.db.execute("ALTER TABLE scans ADD COLUMN excluded TEXT NOT NULL DEFAULT '[]'")
         self.db.commit()
 
     def __enter__(self): return self
 
     def __exit__(self, *args): self.db.close()
 
-    def save_scan(self, roots, use_media, result):
+    def save_scan(self, roots, use_media, result, excluded_folders=()):
         # Only completed *full scans* can write this record; history reads never replace it.
         data = {
             'groups': [{'kind':g.kind, 'files':[asdict(x) for x in g.files],
@@ -74,14 +78,15 @@ class HistoryStore:
         blob=zlib.compress(json.dumps(data, ensure_ascii=False, separators=(',',':')).encode('utf-8'), level=6)
         with self.db:
             self.db.execute('''REPLACE INTO scans
-                (scope,roots,media,created,count,group_count,format_version,payload,last_check,last_summary)
-                VALUES (?,?,?,?,?,?,?,?,NULL,NULL)''',
-                (scope_key(roots,use_media),json.dumps(sorted(roots),ensure_ascii=False),
-                 int(bool(use_media)),time.time(),result.count,len(result.groups),VERSION,blob))
+                (scope,roots,media,created,count,group_count,format_version,payload,last_check,last_summary,excluded)
+                VALUES (?,?,?,?,?,?,?,?,NULL,NULL,?)''',
+                (scope_key(roots,use_media,excluded_folders),json.dumps(sorted(roots),ensure_ascii=False),
+                 int(bool(use_media)),time.time(),result.count,len(result.groups),VERSION,blob,
+                 json.dumps(sorted(excluded_folders),ensure_ascii=False)))
 
-    def load_scan(self, roots, use_media):
+    def load_scan(self, roots, use_media, excluded_folders=()):
         row = self.db.execute('''SELECT created,count,group_count,format_version,payload
-                                 FROM scans WHERE scope=?''', (scope_key(roots,use_media),)).fetchone()
+                                 FROM scans WHERE scope=?''', (scope_key(roots,use_media,excluded_folders),)).fetchone()
         if not row: raise HistoryMissing('目前選取的位置與進階模式沒有已儲存的完整掃描紀錄。請先執行「完整重新掃描」。')
         created,count,group_count,version,payload=row
         if version != VERSION: raise HistoryMissing('歷史紀錄版本已過期，請執行「完整重新掃描」。')
@@ -91,7 +96,7 @@ class HistoryStore:
             raise HistoryMissing('歷史紀錄無法讀取，請執行「完整重新掃描」。') from exc
         return created,data
 
-    def load_latest_scan(self, roots):
+    def load_latest_scan(self, roots, excluded_folders=()):
         """Find existing 本版 scan for these roots, regardless of old media checkbox.
 
         本版 saved records only for detected groups, not a full manifest.
@@ -99,7 +104,7 @@ class HistoryStore:
         options = []
         for enabled in (False, True):
             try:
-                when, data = self.load_scan(roots,enabled)
+                when, data = self.load_scan(roots,enabled,excluded_folders)
                 options.append((enabled,when,data))
             except HistoryMissing:
                 continue
@@ -107,7 +112,7 @@ class HistoryStore:
             raise HistoryMissing('本版 歷史沒有這組掃描路徑，請先執行完整重新掃描。')
         return max(options,key=lambda row:row[1])
 
-    def save_media_resume(self, roots, base_media, base_created, groups, qualities):
+    def save_media_resume(self, roots, base_media, base_created, groups, qualities, excluded_folders=()):
         """Media-only results live separately; they do NOT replace full-scan history."""
         data = {'groups': [{'kind':g.kind,'files':[asdict(x) for x in g.files],
                             'key':g.key,'note':g.note} for g in groups],
@@ -115,11 +120,11 @@ class HistoryStore:
         payload=zlib.compress(json.dumps(data,ensure_ascii=False,separators=(',',':')).encode('utf-8'),6)
         with self.db:
             self.db.execute('REPLACE INTO media_resumes VALUES (?,?,?,?,?)',
-                            (scope_key(roots,False),time.time(),base_created,int(base_media),payload))
+                            (scope_key(roots,False,excluded_folders),time.time(),base_created,int(base_media),payload))
 
-    def load_media_resume(self, roots, base_created, base_media):
+    def load_media_resume(self, roots, base_created, base_media, excluded_folders=()):
         row=self.db.execute('SELECT created,base_created,base_media,payload FROM media_resumes WHERE scope=?',
-                            (scope_key(roots,False),)).fetchone()
+                            (scope_key(roots,False,excluded_folders),)).fetchone()
         if not row: return None
         created, original_created, original_media, payload = row
         if original_created != base_created or bool(original_media) != bool(base_media):
@@ -128,19 +133,20 @@ class HistoryStore:
             return created,json.loads(zlib.decompress(payload).decode('utf-8'))
         except (ValueError,TypeError,zlib.error): return None
 
-    def record_check(self, roots, use_media, summary):
+    def record_check(self, roots, use_media, summary, excluded_folders=()):
         with self.db:
             self.db.execute('UPDATE scans SET last_check=?,last_summary=? WHERE scope=?',
-                            (time.time(),json.dumps(summary,ensure_ascii=False),scope_key(roots,use_media)))
+                            (time.time(),json.dumps(summary,ensure_ascii=False),scope_key(roots,use_media,excluded_folders)))
 
     def summaries(self):
-        rows=self.db.execute('''SELECT scope,roots,media,created,count,group_count,last_check,last_summary
+        rows=self.db.execute('''SELECT scope,roots,media,created,count,group_count,last_check,last_summary,excluded
                                 FROM scans ORDER BY created DESC LIMIT 60''').fetchall()
         summaries=[]
-        for scope,roots,media,created,count,groups,checked,details in rows:
+        for scope,roots,media,created,count,groups,checked,details,excluded_json in rows:
             rootlist=json.loads(roots)
-            supplement=self.load_media_resume(rootlist,created,bool(media))
-            summaries.append({'roots':rootlist,'media':bool(media),
+            excluded=json.loads(excluded_json or "[]")
+            supplement=self.load_media_resume(rootlist,created,bool(media),excluded)
+            summaries.append({'roots':rootlist,'excluded':excluded,'media':bool(media),
                 'media_resumed_at':datetime.fromtimestamp(supplement[0]).strftime('%Y-%m-%d %H:%M:%S') if supplement else '',
                 'created':datetime.fromtimestamp(created).strftime('%Y-%m-%d %H:%M:%S'),
                 'count':count, 'groups':groups,

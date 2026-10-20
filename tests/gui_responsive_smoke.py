@@ -11,13 +11,13 @@ def main():
         assert app.smart.winfo_ismapped() and app.trash.winfo_ismapped()
         assert app.tree.winfo_ismapped() and app.results_panel.winfo_ismapped()
         assert not hasattr(app,'settings_scroll')
-        if w<1120:
+        if w<1510:
             assert app.tabbar.winfo_ismapped()
-            for i in range(3):
+            for i in range(4):
                 app._select_card(i);root.update()
-                assert (app.folder_frame,app.pref_frame,app.opts_frame)[i].winfo_ismapped()
+                assert (app.folder_frame,app.pref_frame,app.excludes_frame,app.opts_frame)[i].winfo_ismapped()
         else:
-            assert all(f.winfo_ismapped() for f in (app.folder_frame,app.pref_frame,app.opts_frame))
+            assert all(f.winfo_ismapped() for f in (app.folder_frame,app.pref_frame,app.excludes_frame,app.opts_frame))
     root.destroy()
     print('Responsive cards and tabs OK')
 

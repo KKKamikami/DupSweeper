@@ -172,22 +172,58 @@ class HashCache:
             self.db = None
 
 
-def list_files(roots, event, progress, error):
+def filtered_result(result: Result, excluded_folders=()):
+    """Return a safe result view with excluded paths removed, never altering history.
+
+    All groups with fewer than two remaining candidates disappear. Quality,
+    signatures and hashes for excluded files are not available in the view.
+    """
+    excluded = normalize_preferred(excluded_folders)
+    if not excluded:
+        return result
+    groups=[]
+    for g in result.groups:
+        files=[x for x in g.files if not inside_any_folder(x.path,excluded)]
+        if len(files)>=2:
+            groups.append(Group(g.kind,files,g.key,g.note))
+    allowed={x.path for g in groups for x in g.files}
+    return Result(groups,result.count,result.hardlinks,result.cache_hits,list(result.errors),
+                  {k:v for k,v in result.qualities.items() if k in allowed},
+                  {k:v for k,v in result.signatures.items() if k in allowed},
+                  {k:v for k,v in result.sha.items() if k in allowed},
+                  result.ffmpeg_available,result.pillow_available,dict(result.history_info))
+
+
+def exclusion_matcher(excluded_folders):
+    """Precompile normalized directory prefixes for efficient disk traversal."""
+    bases = tuple(dict.fromkeys(norm(p) for p in normalize_preferred(excluded_folders)))
+    prefixes = tuple(b if b.endswith(os.sep) else b + os.sep for b in bases)
+    def excluded(path):
+        key = norm(path)
+        return any(key == base or key.startswith(prefix) for base,prefix in zip(bases,prefixes))
+    return excluded
+
+
+def list_files(roots, event, progress, error, excluded_folders=()):
+    is_excluded=exclusion_matcher(excluded_folders)
     sizes, names = defaultdict(list), defaultdict(list)
     visited, inodes = set(), set()
     total = hardlinks = 0
     tick = time.monotonic()
     for root in roots:
+        if is_excluded(root): continue
         stack = [root]
         while stack:
             cancelled(event)
             path = stack.pop()
+            if is_excluded(path): continue
             try:
                 with os.scandir(path) as items:
                     for item in items:
                         cancelled(event)
                         try:
                             if item.is_symlink() or (hasattr(item, 'is_junction') and item.is_junction()): continue
+                            if is_excluded(item.path): continue
                             s = item.stat(follow_symlinks=False)
                             if stat.S_ISDIR(s.st_mode): stack.append(item.path); continue
                             if not stat.S_ISREG(s.st_mode): continue
@@ -418,12 +454,12 @@ def visually_similar_groups(metas, records, sha):
     return groups
 
 
-def run_scan(roots, use_media, event, progress, error, use_cache=True):
+def run_scan(roots, use_media, event, progress, error, use_cache=True, excluded_folders=()):
     errors = []
     def err(msg):
         if len(errors) < 30: errors.append(msg)
         error(msg)
-    sizes, names, count, hardlinks = list_files(roots, event, progress, err)
+    sizes, names, count, hardlinks = list_files(roots, event, progress, err, excluded_folders)
     cache = HashCache()
     hit_count = 0
     try:
@@ -519,7 +555,7 @@ def run_scan(roots, use_media, event, progress, error, use_cache=True):
         cache.close()
 
 
-def run_history(roots, use_media, event, progress, error):
+def run_history(roots, use_media, event, progress, error, excluded_folders=()):
     """Replay *only* previously recorded duplicate groups. No directory walk.
 
     Group invalidated if any recorded, still existing file has changed; missing
@@ -530,15 +566,15 @@ def run_history(roots, use_media, event, progress, error):
         # Use an earlier scan made without media analysis when a new media supplement exists.
         if use_media:
             try:
-                created, data = store.load_scan(roots,True)
+                created, data = store.load_scan(roots,True,excluded_folders)
                 base_media = True
             except __import__('dupsweeper_history').HistoryMissing:
-                created, data = store.load_scan(roots,False)
+                created, data = store.load_scan(roots,False,excluded_folders)
                 base_media = False
         else:
-            created, data = store.load_scan(roots,False)
+            created, data = store.load_scan(roots,False,excluded_folders)
             base_media = False
-        supplement = store.load_media_resume(roots,created,base_media) if use_media else None
+        supplement = store.load_media_resume(roots,created,base_media,excluded_folders) if use_media else None
         if use_media and not base_media and not supplement:
             raise __import__('dupsweeper_history').HistoryMissing('此歷史尚未補做相似分析。請按「補做相似比對」。')
         if supplement:
@@ -588,7 +624,7 @@ def run_history(roots, use_media, event, progress, error):
             if i%100==0 or i==len(all_groups): progress('核對歷史檔案',i,len(all_groups))
         stats['checked_paths']=len(states)
         cancelled(event)
-        store.record_check(roots,base_media,stats)
+        store.record_check(roots,base_media,stats,excluded_folders)
     groups.sort(key=lambda g:(0 if g.kind=='exact' else (1 if g.kind.startswith('similar') else 2),
                               -max(x.size for x in g.files)))
     # Expose only currently surviving candidates, never stale paths or completed groups.
@@ -600,23 +636,27 @@ def run_history(roots, use_media, event, progress, error):
     return result
 
 
-def list_media_files(roots, event, progress, error):
+def list_media_files(roots, event, progress, error, excluded_folders=()):
     """Enumerate CURRENT media files only; 本版歷史 has no full file inventory."""
+    is_excluded=exclusion_matcher(excluded_folders)
     unique_paths = set()
     unique_inodes = set()
     found = []
     scanned = 0
     for root in roots:
+        if is_excluded(root): continue
         stack = [root]
         while stack:
             cancelled(event)
             path = stack.pop()
+            if is_excluded(path): continue
             try:
                 with os.scandir(path) as items:
                     for item in items:
                         cancelled(event)
                         try:
                             if item.is_symlink() or (hasattr(item, 'is_junction') and item.is_junction()): continue
+                            if inside_any_folder(item.path, excluded_folders): continue
                             if item.is_dir(follow_symlinks=False):
                                 stack.append(item.path)
                                 continue
@@ -639,7 +679,7 @@ def list_media_files(roots, event, progress, error):
     return found, scanned
 
 
-def run_media_recheck(roots, event, progress, error):
+def run_media_recheck(roots, event, progress, error, excluded_folders=()):
     """Fill in 先前跳過 visual analysis without rehashing every other file.
 
     A full directory walk IS required: Completed scan history stores duplicate groups, not every
@@ -647,7 +687,7 @@ def run_media_recheck(roots, event, progress, error):
     """
     from dupsweeper_history import HistoryStore
     with HistoryStore() as store:
-        base_media, base_created, base_data = store.load_latest_scan(roots)
+        base_media, base_created, base_data = store.load_latest_scan(roots,excluded_folders)
     try:
         from PIL import Image
     except ImportError as exc:
@@ -660,7 +700,7 @@ def run_media_recheck(roots, event, progress, error):
     def err(msg):
         if len(msgs)<50: msgs.append(msg)
         error(msg)
-    files, enumerated = list_media_files(roots, event, progress, err)
+    files, enumerated = list_media_files(roots,event,progress,err,excluded_folders)
     records={x.path:x for x in files}
     qualities={}
     cache_hits=0
@@ -689,9 +729,9 @@ def run_media_recheck(roots, event, progress, error):
     near.sort(key=lambda g:max(x.size for x in g.files),reverse=True)
     cancelled(event)
     with HistoryStore() as store:
-        store.save_media_resume(roots,base_media,base_created,near,qualities)
+        store.save_media_resume(roots,base_media,base_created,near,qualities,excluded_folders)
     # Replay the recorded exact groups; do not silently treat historical changes as valid.
-    base=run_history(roots,True,event,progress,error)
+    base=run_history(roots,True,event,progress,error,excluded_folders)
     base.errors.extend(msgs)
     base.cache_hits=cache_hits
     base.ffmpeg_available=True
@@ -717,7 +757,7 @@ def protected(path):
     return any(within(x) for x in dirs if x)
 
 
-def trash_worker(plan,event,progress):
+def trash_worker(plan,event,progress,excluded_folders=()):
     """For exact matches, recompute both full hashes. For near-duplicates, recheck signatures.
     Called only after user's explicit confirmation. Never permanently deletes.
     """
@@ -733,6 +773,8 @@ def trash_worker(plan,event,progress):
         cancelled(event)
         x, keeper, kind, expected = entry
         try:
+            if (inside_any_folder(x.path,excluded_folders) or inside_any_folder(keeper.path,excluded_folders)):
+                raise OSError('白名單中的檔案不可移動，也不能作為本次保留依據')
             if protected(x.path) or not snapshot(x) or not snapshot(keeper): raise OSError('檔案已改變或屬系統位置')
             if kind == 'exact':
                 if hash_file(x,event) != expected or hash_file(keeper,event) != expected:
@@ -763,29 +805,31 @@ def child_worker(which, payload, event, events):
         if which=='scan':
             from dupsweeper_history import HistoryStore
             full_refresh = len(payload)>2 and bool(payload[2])
+            excluded_folders = payload[3] if len(payload)>3 else ()
             result = run_scan(payload[0],payload[1],event,
                               lambda stage,n,total:emit('progress',stage,n,total),
-                              lambda msg:emit('error',msg),use_cache=not full_refresh)
+                              lambda msg:emit('error',msg),use_cache=not full_refresh,excluded_folders=excluded_folders)
             # Only a complete scan writes a snapshot, never a cancelled scan.
             try:
                 with HistoryStore() as store:
-                    store.save_scan(payload[0],payload[1],result)
+                    store.save_scan(payload[0],payload[1],result,excluded_folders)
             except (OSError,ValueError,sqlite3.Error) as exc:
                 result.errors.append('歷史紀錄儲存失敗：'+str(exc))
             emit('done_scan',result)
         elif which=='media_resume':
             result=run_media_recheck(payload[0], event,
                           lambda stage,n,total:emit('progress',stage,n,total),
-                          lambda msg:emit('error',msg))
+                          lambda msg:emit('error',msg),payload[2] if len(payload)>2 else ())
             emit('done_scan',result)
         elif which=='history':
             result=run_history(payload[0],payload[1],event,
                                lambda stage,n,total:emit('progress',stage,n,total),
-                               lambda msg:emit('error',msg))
+                               lambda msg:emit('error',msg),payload[2] if len(payload)>2 else ())
             emit('done_scan',result)
         else:
-            removed,errors = trash_worker(payload,event,
-                              lambda stage,n,total:emit('progress',stage,n,total))
+            plan,excluded_folders = payload if isinstance(payload,tuple) else (payload,())
+            removed,errors = trash_worker(plan,event,
+                              lambda stage,n,total:emit('progress',stage,n,total),excluded_folders)
             emit('done_trash',removed,errors)
     except Cancelled: emit('cancelled')
     except BaseException as exc: emit('fatal',f'{type(exc).__name__}: {exc}')
