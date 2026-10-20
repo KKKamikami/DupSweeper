@@ -1,103 +1,85 @@
-# 檔案整理助手｜獨立最終版
+# DupSweeper
 
-**找重複檔案、比較照片與影片、智慧選擇保留版本。刪除前一定由你確認。**
+[English](#english-documentation) | [繁體中文](#中文說明)
 
-支援 Windows、macOS；所有掃描、媒體特徵與歷史紀錄在你的電腦本機處理。首次「開發／打包」需連線下載套件，**已製作完成的 EXE／APP 不需要安裝 Python**。若掃描 OneDrive 等同步資料夾，雲端服務可能自行下載雲端檔案。
+---
 
-## 開始使用
+## English Documentation
 
-**Windows（建置完成後）**：下載 `FileTidy.exe`，放在任意資料夾，雙擊啟動；不需要執行 BAT、安裝 Python 或另行安裝 FFmpeg。
+A cross platform GUI tool to find duplicate files compare photos and videos and smartly select versions to keep All scans are processed locally on your computer and files are never deleted without your confirmation
 
-**macOS（建置完成後）**：下載 `FileTidy_macOS.zip`，解壓後雙擊 `FileTidy.app`。首次開啟可能受到 Gatekeeper 阻擋，請從「系統設定 → 隱私權與安全性」確認來源後選擇允許。此程式未經 Apple 公證，不能保證每台 Mac 都能直接開啟；**請只執行你信任來源的程式**。
+### Project Files Description
 
-> 本專案提供程式碼與可在相應系統自動產生原生執行檔的打包流程。Linux 環境**不能直接產生／驗證** Windows EXE 和 macOS APP；若取得的是「原始碼 ZIP」，它**不是**可直接雙擊的 EXE。原生執行檔應從下述建置作業下載。
+| File or Folder | Description |
+| :--- | :--- |
+| `duplicate_finder.py` | Main graphical user interface application entry point |
+| `duplicate_engine.py` | Core comparison engine handling file hashing image analysis and video fingerprinting |
+| `history_store.py` | SQLite database manager for saving scan history and supporting resume functionality |
+| `packaging` | Automated build scripts for generating standalone Windows EXE and macOS APP bundles |
+| `tests` | Automated test suite for verifying engine accuracy GUI responsiveness and resume features |
+| `requirements-build.txt` | Python package dependencies required for building standalone executables |
 
-## 五個操作步驟
+### How the Program Works
 
-1. **加入掃描位置**：選擇一顆硬碟或多個資料夾。視窗較窄時，先按右上角「展開設定」。
-2. **設定優先保留資料夾（選用）**：可以加入多個，優先層級相同。群組內若有優先資料夾的檔案，先從其中保留品質較好的版本；否則從整組選最佳版。
-3. **選擇掃描方式**：首次使用「完整重新掃描」，之後可使用「歷史快速檢查」查核尚未完成的已知群組；定期再執行完整重新掃描。
-4. **智慧選取與人工檢查**：智慧選取僅標記候選檔案，**不會立即刪除**。雙擊檔案列可更改標記，亦可匯出 CSV。
-5. **確認移至回收桶**：程式再檢查檔案狀態與內容，需你確認才開始移動。外接或網路磁碟的回收桶行為可能因系統不同而異。
+* **Multi Stage Filtering** First groups files by byte size then computes fast partial hashes and finally verifies full cryptographic hashes or perceptual media signatures to avoid unnecessary disk reads
+* **Smart Media Analysis** Integrates FFmpeg and image libraries to extract visual frames and audio features allowing it to detect duplicate photos and videos even if their filenames or formats differ
+* **History and Resume Store** Saves scan progress and file signatures in a local database so interrupted scans can resume instantly and future checks only process newly added or modified files
+* **Smart Retention Rules** Evaluates priority folders media resolution and file modification time to automatically recommend the best version to keep in each duplicate group
 
-## 類型判斷
+### Installation and Operation
 
-| 類型 | 如何判斷 | 可否智慧標記 |
-| --- | --- | --- |
-| 內容完全相同 | 檔案大小、三段快速取樣、再完整 SHA-256 驗證 | 可以，至少保留一份 |
-| 同名不同內容 | 名稱相同，但位元內容不同 | **只警告，不自動選取** |
-| 相似照片 | Pillow 產生 dHash 視覺特徵 | 預設不標記；開啟高風險選項後才可 |
-| 相似影片 | FFmpeg／FFprobe 取樣影格，搭配影片長度與比例 | 預設不標記；必須人工比對音軌、字幕與剪輯差異 |
+#### 1 Standalone Installation for General Users
+* **Windows** Go to the Releases page download `FileTidy.exe` place it in any folder and double click to launch No Python or FFmpeg installation is required
+* **macOS** Go to the Releases page download `FileTidy_macOS.zip` extract it and double click `FileTidy.app` If blocked by macOS Gatekeeper on first launch go to System Settings then Privacy and Security to allow it
 
-**快取與歷史不是完整檔案庫**。歷史模式只核對先前已記錄的群組，可能略過新增檔案；「補做相似比對」會從有歷史的掃描路徑重新列舉媒體檔案，但不取代全面重新掃描。
+#### 2 Run from Source for Developers
+* Install Python 3 and run `pip install -r requirements-build.txt` in your terminal
+* Run `python duplicate_finder.py` to launch the graphical interface directly
 
-**強制停止**：可終止獨立背景工作；如果停止時已在移動檔案，部分檔案可能已被移動，務必重新掃描確認。
+#### 3 Five Operation Steps
+1. **Add Scan Locations** Select one drive or multiple folders to scan If the window is narrow click Expand Settings at the top right first
+2. **Set Priority Folders** Optional Add one or more preferred folders When duplicates are found files inside priority folders will be kept first
+3. **Select Scan Mode** Choose Full Rescan for the first run Later you can use Quick History Check to verify known groups or Incremental Scan to check new files
+4. **Review and Confirm** Inspect the detected duplicate groups preview photos or videos side by side and verify which files are marked for keeping
+5. **Execute Cleanup** Confirm your selections to safely move unwanted duplicates to the trash or delete them permanently
 
-## 歷史與舊版本完全隔離
+---
 
-此最終版**不讀取、不遷移，也不修改 v3／v4 的資料庫或設定**。開始使用時請先做一次完整重新掃描。
+## 中文說明
 
-本版專用資料夾：
+跨平台重複檔案搜尋與整理工具 支援尋找重複檔案 比較照片與影片 並智慧選擇最佳保留版本 所有掃描皆在你的電腦本機處理 刪除前一定經過你的確認
 
-- Windows：`%LOCALAPPDATA%\FileTidyFinal\`
-- macOS：`~/Library/Application Support/FileTidyFinal/`（歷史與設定）；`~/Library/Caches/FileTidyFinal/`（快取）
-- Linux 原始碼測試：`~/.local/share/FileTidyFinal/`（歷史）；`~/.cache/FileTidyFinal/`（快取）
+### 檔案結構描述
 
-歷史記錄在 `scan_history.sqlite3`，檔案雜湊快取在 `hash_cache.sqlite3`，設定在 `settings.json`。
+| 檔案或資料夾名稱 | 功能說明 |
+| :--- | :--- |
+| `duplicate_finder.py` | 圖形化使用者介面主程式與啟動入口 |
+| `duplicate_engine.py` | 核心比對引擎 負責檔案雜湊計算 圖片相似度分析與影片特徵擷取 |
+| `history_store.py` | 歷史紀錄管理模組 負責儲存掃描進度以支援斷點續傳與快速檢查 |
+| `packaging` | 跨平台自動化打包腳本 用於製作獨立的 Windows 執行檔與 macOS 應用程式 |
+| `tests` | 自動化測試程式集 用於驗證比對引擎準確度 介面反應與續傳功能 |
+| `requirements-build.txt` | 開發與打包獨立執行檔所需的 Python 套件清單 |
 
-## 如何產出一鍵執行檔（專案作者或維護人員）
+### 程式運作原理
 
-### GitHub Actions（推薦）
+* **多階段加速篩選** 先比對檔案大小快速排除獨立檔案 接著計算局部特徵碼 最後才進行完整雜湊或影音內容比對 大幅減少硬碟讀取時間
+* **智慧影音特徵比對** 整合 FFmpeg 與影像處理技術 擷取照片與影片的視覺畫面進行比對 即使檔名不同或格式轉換也能精準抓出重複影音
+* **歷史資料庫與斷點續傳** 將掃描過的檔案特徵與進度寫入本機資料庫 大型硬碟掃描中斷後可直接接續進度 日後也能只針對新增或修改的檔案進行快速比對
+* **智慧保留決策機制** 根據使用者設定的優先保留資料夾 畫質解析度與檔案時間 自動在重複群組中勾選最值得保留的最佳版本
 
-將本原始碼資料夾**全部上傳至自己的 GitHub 儲存庫根目錄**，進入 **Actions → Build one-click Windows and macOS apps → Run workflow**。建置成功後在該次工作頁的 **Artifacts** 取得：
+### 程式安裝與操作方式
 
-- `FileTidy_Windows_EXE`：內含 `FileTidy.exe`，Windows 雙擊執行。
-- `FileTidy_macOS_AppleSilicon_APP` 或 `FileTidy_macOS_Intel_APP`：依 Mac 晶片類型選擇，內含 `FileTidy_macOS.zip`，解壓後可雙擊 `.app`。
+#### 1 一般使用者免安裝執行版
+* **Windows 系統** 前往 Releases 頁面下載 `FileTidy.exe` 放在任意資料夾並雙擊啟動 不需要執行批次檔也不用安裝 Python 或 FFmpeg
+* **macOS 系統** 前往 Releases 頁面下載 `FileTidy_macOS.zip` 解壓縮後雙擊 `FileTidy.app` 首次開啟若受到系統阻擋 請從系統設定進入隱私權與安全性選擇允許開啟
 
-工作流程使用 Windows / macOS 原生建置環境，包含 Pillow、Send2Trash 和 FFmpeg/FFprobe，並執行 `--self-test` 驗證基本比對。Windows 建置時驗證 FFmpeg 發行者提供的 SHA-256 校驗碼。
+#### 2 開發者原始碼執行方式
+* 確保電腦已安裝 Python 3 並在終端機執行 `pip install -r requirements-build.txt` 安裝依賴套件
+* 在終端機執行 `python duplicate_finder.py` 即可直接啟動圖形化介面
 
-### 自己在 Windows 建置
-
-安裝 **Python 3.11 或更新版本**，開 PowerShell 執行：
-
-```powershell
-./packaging/build_windows.ps1
-```
-
-成品位置：`dist/FileTidy.exe`。
-
-### 自己在 macOS 建置
-
-安裝 **Python 3.11+、Homebrew**，執行：
-
-```bash
-./packaging/build_macos.sh
-```
-
-成品位置：`release/FileTidy_macOS.zip`。
-
-### 從原始碼執行（開發者）
-
-```bash
-python3 -m pip install Pillow Send2Trash
-python3 duplicate_finder.py
-```
-
-要使用相似影片功能，請自行安裝 FFmpeg 與 FFprobe，或使用上方已打包的正式執行檔。
-
-## 安全及限制
-
-- 刪除永遠要人工確認；相似媒體不能保證是同一作品，不可在未預覽前批次刪除。
-- 系統目錄、應用程式資料夾有額外保護；資料不可讀或檔案在掃描中變動時可能略過，應查看錯誤狀態。
-- 無法保證所有特殊照片格式都能由 Pillow 解碼，也無法保證所有影片都由 FFmpeg 正確分析。
-- 用戶應自行備份重要資料。EXE 與 APP 未附數位簽章或 Apple 公證；下載後請確認來源。
-- 本軟體使用 FFmpeg（[ffmpeg.org](https://ffmpeg.org/)），其散布授權取決於實際建置配置。若對外散布含 FFmpeg 的執行檔，請一併遵循該版本的 LGPL/GPL 授權與相應原始碼提供義務。
-
-## 測試
-
-```bash
-python3 -m pip install pytest
-python3 -m pytest -q tests
-```
-
-圖形介面可在支援 Tk 的桌面環境執行 `python3 tests/gui_smoke.py` 等測試。
+#### 3 五個操作步驟
+1. **加入掃描位置** 選擇一顆硬碟或多個資料夾 視窗較窄時可先按右上角展開設定按鈕
+2. **設定優先保留資料夾** 選用功能 可加入多個資料夾 群組內若有位於優先資料夾的檔案會優先保留該處品質較好的版本
+3. **選擇掃描方式** 首次使用請選完整重新掃描 之後可使用歷史快速檢查核對尚未處理的群組 或使用增量掃描加速檢查新檔案
+4. **預覽與確認保留項目** 點擊重複群組預覽照片或影片 檢查系統自動挑選的保留版本是否符合需求
+5. **執行安全清理** 確認勾選無誤後執行移除 釋放硬碟空間
