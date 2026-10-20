@@ -12,7 +12,7 @@ def main():
         app.trust_photo.set(True);app._trust_changed()
         for w in (1280,990,920,1280):
             root.geometry(f'{w}x820');root.update()
-            if w<1510:app._select_card(3);root.update()
+            if app._layout_mode=='tabs':app._select_card(3);root.update()
             assert app.opts_frame.winfo_ismapped()
             assert app.smart.winfo_ismapped() and app.trash.winfo_ismapped()
         root.destroy()

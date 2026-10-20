@@ -11,7 +11,7 @@ def main():
         assert app.smart.winfo_ismapped() and app.trash.winfo_ismapped()
         assert app.tree.winfo_ismapped() and app.results_panel.winfo_ismapped()
         assert not hasattr(app,'settings_scroll')
-        if w<1510:
+        if app._layout_mode=='tabs':
             assert app.tabbar.winfo_ismapped()
             for i in range(4):
                 app._select_card(i);root.update()

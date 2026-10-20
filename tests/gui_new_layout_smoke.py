@@ -19,7 +19,7 @@ def inspect(lang):
         assert app.settings_panel.winfo_ismapped()
         assert not hasattr(app,'settings_scroll')
         assert app.exclusion_skip_check.winfo_exists()
-        if width<1510:
+        if app._layout_mode=='tabs':
             assert app.tabbar.winfo_ismapped(),width
             for j in range(4):
                 app._select_card(j)

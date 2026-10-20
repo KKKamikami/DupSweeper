@@ -47,6 +47,8 @@ _TRANSLATIONS.update({
 })
 
 _TRANSLATIONS.update({
+    '其他掃描操作': 'More Scan Tools',
+    '其他結果操作': 'More Result Tools',
     '排除資料夾': 'Excluded Folders',
     '｜排除：': ' | skipped: ',
     '排除資料夾／白名單': 'Excluded folders / Allowlist',

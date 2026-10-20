@@ -60,9 +60,9 @@ def stats_string(x, q):
 class App:
     def __init__(self,root):
         self.root=root
-        root.title(T('DupSweeper v1.3.0｜重複檔案整理'))
-        root.geometry('1570x910')
-        root.minsize(900,780)
+        root.title(T('DupSweeper v1.4.0｜重複檔案整理'))
+        root.geometry('1180x810')
+        root.minsize(780,720)
         self.paths=[]
         self.preferred_paths=self._load_preferences()
         self.excluded_paths=self._load_excluded()
@@ -79,6 +79,8 @@ class App:
         self.item_map={}
         self.row_groups={}
         self.filter_job=None
+        self._layout_pending=None
+        self._layout_mode=None
         self.dirty=False
         self.view_limit=200
         self._build()
@@ -107,10 +109,13 @@ class App:
         style.configure('Muted.TLabel',background=c['bg'],foreground=c['muted'])
         style.configure('PanelMuted.TLabel',background=c['surface'],foreground=c['muted'])
         style.configure('Header.TLabel',font=('',22,'bold'),background=c['bg'],foreground=c['text'])
-        style.configure('TButton',padding=(13,9),borderwidth=1,background=c['blue'],
+        style.configure('TButton',padding=(10,5),borderwidth=1,background=c['blue'],
                         foreground=c['text'],relief='flat')
         style.map('TButton',background=[('active',c['sage']),('disabled','#F0F1F2')],
                   foreground=[('disabled','#9BA4AA')])
+        style.configure('Tabs.TButton',padding=(9,4),background=c['blue'])
+        style.configure('SelectedTabs.TButton',padding=(9,4),background=c['sage'],foreground='#25483E')
+        style.map('Tabs.TButton',background=[('active',c['sage'])])
         style.configure('Primary.TButton',background=c['sage'],foreground='#25483E',font=('',11,'bold'))
         style.map('Primary.TButton',background=[('active','#D0E5D7')])
         style.configure('Danger.TButton',background=c['peach'],foreground='#80494B',font=('',11,'bold'))
@@ -153,7 +158,7 @@ class App:
     def _build(self):
         self._init_theme()
         c=self.colors
-        main=ttk.Frame(self.root,style='Base.TFrame',padding=(18,14))
+        main=ttk.Frame(self.root,style='Base.TFrame',padding=(14,10))
         main.pack(fill='both',expand=True)
         main.columnconfigure(0,weight=1)
         main.rowconfigure(3,weight=1)
@@ -162,7 +167,7 @@ class App:
         header.columnconfigure(0,weight=1)
         ttk.Label(header,text='DupSweeper',style='Header.TLabel').grid(row=0,column=0,sticky='w')
         ttk.Label(header,text=T('找重複、選保留、確認後移除'),style='Muted.TLabel').grid(row=1,column=0,sticky='w')
-        ttk.Label(header,text=T('v1.3.0 · 本機處理'),style='Muted.TLabel').grid(row=0,column=1,sticky='e')
+        ttk.Label(header,text=T('v1.4.0 · 本機處理'),style='Muted.TLabel').grid(row=0,column=1,sticky='e')
         tools=ttk.Frame(main,style='Base.TFrame')
         tools.grid(row=1,column=0,sticky='ew',pady=(0,9))
         self.history_btn=ttk.Button(tools,text=T('歷史快速檢查'),command=self._start_history)
@@ -172,11 +177,17 @@ class App:
         self.stop=ttk.Button(tools,text=T('安全停止'),command=self._soft_stop,state='disabled')
         self.kill=ttk.Button(tools,text=T('強制停止'),style='Danger.TButton',command=self._force_stop,state='disabled')
         self.toolbar_buttons=[self.history_btn,self.scan,self.resume_btn,self.history_view,self.stop,self.kill]
+        self.scan_more=ttk.Menubutton(tools,text=T('其他掃描操作'))
+        self.scan_more_menu=tk.Menu(self.scan_more,tearoff=False)
+        self.scan_more_menu.add_command(label=T('補做相似比對'),command=self._start_media_resume)
+        self.scan_more_menu.add_command(label=T('查看歷史'),command=self._show_history)
+        self.scan_more.configure(menu=self.scan_more_menu)
         progress=ttk.Frame(main,style='Base.TFrame')
         progress.grid(row=2,column=0,sticky='ew',pady=(0,9))
         progress.columnconfigure(0,weight=1)
         self.progress_var=tk.StringVar(value=T('就緒：請加入掃描位置。'))
-        ttk.Label(progress,textvariable=self.progress_var,style='Muted.TLabel').grid(row=0,column=0,sticky='w')
+        self.progress_label=ttk.Label(progress,textvariable=self.progress_var,style='Muted.TLabel',wraplength=500,justify='left')
+        self.progress_label.grid(row=0,column=0,sticky='ew')
         self.pb=ttk.Progressbar(progress,mode='determinate',maximum=100)
         self.pb.grid(row=1,column=0,sticky='ew',pady=(6,0))
 
@@ -184,15 +195,17 @@ class App:
         self.workspace.grid(row=3,column=0,sticky='nsew')
         self.workspace.columnconfigure(0,weight=1)
         self.workspace.rowconfigure(1,weight=1)
+        self.workspace.rowconfigure(2,weight=0)
         # No scrolling settings side rail: all cards or explicit visible tabs.
         settings=ttk.Frame(self.workspace,style='Base.TFrame')
         self.settings_inner=settings
         self.settings_panel=settings
+        self.settings_inner.rowconfigure(0,weight=1)
         settings.grid(row=0,column=0,sticky='ew')
         self.tabbar=ttk.Frame(self.workspace,style='Base.TFrame')
         self.card_tabs=[]
         for i,name in enumerate((T('掃描位置'),T('優先保留'),T('排除資料夾'),T('相似媒體'))):
-            btn=ttk.Button(self.tabbar,text=name,command=lambda k=i:self._select_card(k))
+            btn=ttk.Button(self.tabbar,text=name,style='Tabs.TButton',command=lambda k=i:self._select_card(k))
             btn.grid(row=0,column=i,sticky='ew',padx=(0,8))
             self.tabbar.columnconfigure(i,weight=1)
             self.card_tabs.append(btn)
@@ -229,8 +242,9 @@ class App:
         for j,b in enumerate([self.pref_add,self.pref_remove,self.pref_clear]):
             pref.columnconfigure(j,weight=1)
             b.grid(row=1,column=j,sticky='ew',padx=(0,4) if j<2 else 0)
-        ttk.Label(pref,text=T('優先保留這些位置中較好的版本。'),
-                  style='PanelMuted.TLabel',wraplength=360).grid(row=2,column=0,columnspan=3,sticky='w',pady=(8,0))
+        self.preferred_hint=ttk.Label(pref,text=T('優先保留這些位置中較好的版本。'),
+                  style='PanelMuted.TLabel',wraplength=220,justify='left')
+        self.preferred_hint.grid(row=2,column=0,columnspan=3,sticky='ew',pady=(8,0))
 
         excludes=ttk.LabelFrame(settings,text=T('排除資料夾／白名單'),padding=(9,8),style='Panel.TLabelframe')
         self.excludes_frame=excludes
@@ -250,7 +264,7 @@ class App:
         self.exclusion_skip_check=ttk.Checkbutton(excludes,style='TickBox.TCheckbutton',
             text=T('掃描前略過排除資料夾'),variable=self.skip_excluded,command=self._exclusions_changed)
         self.exclusion_skip_check.grid(row=2,column=0,columnspan=3,sticky='w',pady=(5,0))
-        self.exclude_hint=ttk.Label(excludes,style='PanelMuted.TLabel',wraplength=300,
+        self.exclude_hint=ttk.Label(excludes,style='PanelMuted.TLabel',wraplength=220,justify='left',
             text=T('排除資料夾及子資料夾不會出現在結果，也不會被智慧選取。取消上方勾選可全碟掃描後再隱藏。'))
         self.exclude_hint.grid(row=3,column=0,columnspan=3,sticky='w',pady=(5,0))
 
@@ -261,17 +275,27 @@ class App:
         self.trust_photo=tk.BooleanVar(value=self._load_trust_setting('smart_similar_photo'))
         self.trust_video=tk.BooleanVar(value=self._load_trust_setting('smart_similar_video'))
         self.allow_near=tk.BooleanVar(value=False)
-        self.media_checks=[
-            ttk.Checkbutton(opts,style='TickBox.TCheckbutton',text=T('啟用相似媒體分析'),
-                            variable=self.media_opt,command=self._save_preference),
-            ttk.Checkbutton(opts,style='TickBox.TCheckbutton',text=T('智慧選取相似照片／圖片（信任）'),
-                            variable=self.trust_photo,command=self._trust_changed),
-            ttk.Checkbutton(opts,style='TickBox.TCheckbutton',text=T('智慧選取相似影片（信任）'),
-                            variable=self.trust_video,command=self._trust_changed),
-            ttk.Checkbutton(opts,style='TickBox.TCheckbutton',text=T('允許手動標記其他相似媒體'),
-                            variable=self.allow_near)]
+        # Each option has a native keyboard-accessible checkbox and a separately
+        # wrapped label. ttk.Checkbutton's own text does not reliably wrap.
+        self.media_rows=[]
+        self.media_checks=[]
+        for caption,variable,command in (
+                (T('啟用相似媒體分析'),self.media_opt,self._save_preference),
+                (T('智慧選取相似照片／圖片（信任）'),self.trust_photo,self._trust_changed),
+                (T('智慧選取相似影片（信任）'),self.trust_video,self._trust_changed),
+                (T('允許手動標記其他相似媒體'),self.allow_near,None)):
+            row=ttk.Frame(opts,style='Panel.TFrame')
+            row.columnconfigure(1,weight=1)
+            chk=ttk.Checkbutton(row,style='TickBox.TCheckbutton',variable=variable,command=command,
+                                takefocus=True)
+            chk.grid(row=0,column=0,sticky='nw')
+            lab=ttk.Label(row,text=caption,style='Panel.TLabel',justify='left',wraplength=260)
+            lab.grid(row=0,column=1,sticky='nw',padx=(3,0))
+            lab.bind('<Button-1>',lambda event,b=chk:b.invoke())
+            self.media_rows.append((row,lab))
+            self.media_checks.append(chk)
         self.media_hint=ttk.Label(opts,text=T('勾選的相似類型不需逐組審核；移至回收桶仍須總確認。'),
-                                   style='PanelMuted.TLabel',wraplength=350)
+                                   style='PanelMuted.TLabel',wraplength=260,justify='left')
         self._layout_media_options(False)
 
         results=ttk.Frame(self.workspace,style='Panel.TFrame',padding=(15,12))
@@ -283,7 +307,8 @@ class App:
         search.grid(row=0,column=0,sticky='ew',pady=(0,7))
         search.columnconfigure(0,weight=1)
         self.summary=tk.StringVar(value=T('尚無掃描結果'))
-        ttk.Label(search,textvariable=self.summary,style='Panel.TLabel',wraplength=800).grid(row=0,column=0,sticky='w')
+        self.summary_label=ttk.Label(search,textvariable=self.summary,style='Panel.TLabel',wraplength=500,justify='left')
+        self.summary_label.grid(row=0,column=0,sticky='ew')
         ttk.Label(search,text=T('搜尋：'),style='Panel.TLabel').grid(row=0,column=1,sticky='e')
         self.filter=tk.StringVar()
         entry=ttk.Entry(search,textvariable=self.filter,width=22)
@@ -291,7 +316,7 @@ class App:
         entry.insert(0,'')
         self.filter.trace_add('write',lambda *_:self._schedule_filter())
         cols=('state','size','quality','path')
-        self.tree=ttk.Treeview(results,columns=cols,show='tree headings',selectmode='extended')
+        self.tree=ttk.Treeview(results,columns=cols,show='tree headings',selectmode='extended',height=6)
         for k,t in [('#0',T('群組／檔案')),('state',T('建議')),('size',T('大小')),('quality',T('畫質')),('path',T('位置'))]:
             self.tree.heading(k,text=t)
         self.tree.column('#0',width=260,minwidth=160,stretch=False)
@@ -326,94 +351,146 @@ class App:
         self.copy_btn=ttk.Button(actions,text=T('複製路徑'),command=self._copy)
         self.csv_btn=ttk.Button(actions,text=T('匯出 CSV'),command=self._csv)
         self.action_buttons=[self.smart,self.mark,self.unmark,self.trash,self.open_btn,self.copy_btn,self.csv_btn]
+        self.action_more=ttk.Menubutton(actions,text=T('其他結果操作'))
+        self.action_more_menu=tk.Menu(self.action_more,tearoff=False)
+        for label,callback in ((T('標記所選'),self._mark),(T('清除標記'),self._unmark),
+                               (T('開啟檔案位置'),self._open),(T('複製路徑'),self._copy),
+                               (T('匯出 CSV'),self._csv)):
+            self.action_more_menu.add_command(label=label,command=callback)
+        self.action_more.configure(menu=self.action_more_menu)
         for j,b in enumerate(self.action_buttons):b.grid(row=0,column=j,sticky='ew',padx=(0,6))
         self.marked_label=tk.StringVar(value=T('待移除：0 份'))
         ttk.Label(main,textvariable=self.marked_label,style='Muted.TLabel').grid(row=5,column=0,sticky='w')
         self.root.bind('<Configure>',self._adapt,add='+')
-        self._adapt_layout(self.root.winfo_width())
+        self._adapt_layout(1180,810)
 
-    def _layout_media_options(self,compact):
-        for w in (*self.media_checks,self.media_hint):
-            w.grid_forget()
-        for j,w in enumerate(self.media_checks):
-            r,col=(j//2,j%2) if compact else (j,0)
-            w.grid(row=r,column=col,sticky='w',pady=3,padx=(0,14))
-        if compact:
-            self.opts_frame.columnconfigure(0,weight=1)
-            self.opts_frame.columnconfigure(1,weight=1)
-            self.media_hint.configure(wraplength=740)
-            self.media_hint.grid(row=2,column=0,columnspan=2,sticky='w',pady=(4,0))
-        else:
-            self.opts_frame.columnconfigure(0,weight=1)
-            self.opts_frame.columnconfigure(1,weight=0)
-            self.media_hint.configure(wraplength=350)
-            self.media_hint.grid(row=4,column=0,columnspan=1,sticky='w',pady=(6,0))
+    def _layout_media_options(self,wide):
+        # Use two rows only if there is genuinely enough horizontal space.
+        # Every text label is allowed to wrap within its own cell.
+        for row,lab in self.media_rows:
+            row.grid_forget()
+        self.media_hint.grid_forget()
+        self.opts_frame.columnconfigure(0,weight=1)
+        self.opts_frame.columnconfigure(1,weight=1 if wide else 0)
+        for i,(row,lab) in enumerate(self.media_rows):
+            r,col=divmod(i,2) if wide else (i,0)
+            row.grid(row=r,column=col,sticky='new',padx=(0,12) if wide and col==0 else 0,pady=2)
+        hint_row=2 if wide else 4
+        self.media_hint.grid(row=hint_row,column=0,columnspan=2 if wide else 1,sticky='ew',pady=(6,0))
 
     def _adapt(self,event):
         if event.widget is self.root:
-            self._adapt_layout(event.width)
+            # A single resize pass per idle cycle prevents oscillation as cards
+            # alter requested geometry during a drag-resize operation.
+            if self._layout_pending is not None:
+                self.root.after_cancel(self._layout_pending)
+            self._layout_pending=self.root.after_idle(self._adapt_to_window)
+
+    def _adapt_to_window(self):
+        self._layout_pending=None
+        self._adapt_layout(self.root.winfo_width(), self.root.winfo_height())
 
     def _select_card(self,index):
         self.active_card=index
-        if getattr(self,'_compact',False):
+        if getattr(self,'_layout_mode',None)=='tabs':
             for i,frame in enumerate((self.folder_frame,self.pref_frame,self.excludes_frame,self.opts_frame)):
-                if i==index:
-                    frame.grid(row=0,column=0,sticky='nsew')
-                else:
-                    frame.grid_remove()
+                if i==index: frame.grid(row=0,column=0,sticky='nsew')
+                else: frame.grid_remove()
             for i,btn in enumerate(self.card_tabs):
-                btn.configure(style='Primary.TButton' if i==index else 'TButton')
+                btn.configure(style='SelectedTabs.TButton' if i==index else 'Tabs.TButton')
 
-    def _adapt_layout(self,width):
-        # Width adapts without ANY settings scroll bar: cards when wide,
-        # one clearly labelled tab per group when compact.
-        compact=width<1510
-        if getattr(self,'_compact',None) != compact:
-            self._compact=compact
-            for item in (self.folder_frame,self.pref_frame,self.excludes_frame,self.opts_frame):
-                item.grid_forget()
-            for i in range(4):self.settings_inner.columnconfigure(i,weight=0)
+    def _adapt_layout(self,width,height=None):
+        if height is None: height=self.root.winfo_height()
+        # Never force four cards across a single row. Use 2x2 only on tall,
+        # spacious windows, otherwise display four explicit, discoverable tabs.
+        mode='grid' if width>=1180 and height>=1000 else 'tabs'
+        if self._layout_mode!=mode:
+            self._layout_mode=mode
+            self._compact=(mode=='tabs')
+            for frame in (self.folder_frame,self.pref_frame,self.excludes_frame,self.opts_frame):
+                frame.grid_forget()
             self.tabbar.grid_forget()
-            self._layout_media_options(compact)
+            self.settings_inner.grid_forget()
+            self.results_panel.grid_forget()
+            self.workspace.rowconfigure(0,weight=0)
             self.workspace.rowconfigure(1,weight=0)
             self.workspace.rowconfigure(2,weight=0)
-            if compact:
-                self.folders.configure(height=2)
-                self.preferred_list.configure(height=2)
-                self.excluded_list.configure(height=2)
-                self.tabbar.grid(row=0,column=0,sticky='ew',pady=(0,7))
-                self.settings_inner.grid_configure(row=1,column=0)
-                self.results_panel.grid_configure(row=2,column=0)
+            for i in range(4):
+                self.settings_inner.columnconfigure(i,weight=0,uniform='')
+            if mode=='tabs':
                 self.workspace.rowconfigure(2,weight=1)
-                self.settings_inner.columnconfigure(0,weight=1)
+                self.tabbar.grid(row=0,column=0,sticky='ew',pady=(0,5))
+                self.settings_inner.grid(row=1,column=0,sticky='ew')
+                self.results_panel.grid(row=2,column=0,sticky='nsew',pady=(8,0))
+                self.settings_inner.columnconfigure(0,weight=1,uniform='')
                 self._select_card(self.active_card)
             else:
-                self.folders.configure(height=3)
-                self.preferred_list.configure(height=3)
-                self.excluded_list.configure(height=3)
-                self.settings_inner.grid_configure(row=0,column=0)
-                self.results_panel.grid_configure(row=1,column=0)
                 self.workspace.rowconfigure(1,weight=1)
-                self.settings_inner.columnconfigure(0,weight=1)
-                self.settings_inner.columnconfigure(1,weight=1)
-                self.settings_inner.columnconfigure(2,weight=1)
-                self.settings_inner.columnconfigure(3,weight=1)
+                self.settings_inner.grid(row=0,column=0,sticky='ew')
+                self.results_panel.grid(row=1,column=0,sticky='nsew',pady=(10,0))
+                self.settings_inner.columnconfigure(0,weight=1,uniform='settings')
+                self.settings_inner.columnconfigure(1,weight=1,uniform='settings')
                 for i,frame in enumerate((self.folder_frame,self.pref_frame,self.excludes_frame,self.opts_frame)):
-                    frame.grid(row=0,column=i,sticky='nsew',padx=(0,10) if i<3 else 0)
-        tiny=width<920
-        if getattr(self,'_tiny',None)!=tiny:
-            self._tiny=tiny
-            for b in self.toolbar_buttons:b.grid_forget()
-            for j,b in enumerate(self.toolbar_buttons):
-                r,k=divmod(j,3 if tiny else 6)
-                b.grid(row=r,column=k,sticky='ew',padx=(0,7),pady=(0,5))
-            for b in self.action_buttons:b.grid_forget()
-            for j,b in enumerate(self.action_buttons):
-                r,k=divmod(j,4 if tiny else 7)
-                b.grid(row=r,column=k,sticky='ew',padx=(0,7),pady=(0,5))
-            self.tree.column('#0',width=180 if tiny else 260)
-            self.tree.column('quality',width=120 if tiny else 175)
-
+                    frame.grid(row=i//2,column=i%2,sticky='nsew',padx=(0,8) if i%2==0 else 0,pady=(0,7) if i<2 else 0)
+        # 2x2 tabs in genuinely narrow windows; one line otherwise.
+        tab_cols=2 if width<940 else 4
+        if getattr(self,'_tab_cols',None)!=tab_cols:
+            self._tab_cols=tab_cols
+            for b in self.card_tabs:b.grid_forget()
+            for i in range(4):self.tabbar.columnconfigure(i,weight=0,uniform='')
+            for i,b in enumerate(self.card_tabs):
+                r,k=divmod(i,tab_cols)
+                b.grid(row=r,column=k,sticky='ew',padx=(0,6),pady=(0,4))
+            for i in range(tab_cols):self.tabbar.columnconfigure(i,weight=1,uniform='tabs')
+        # Wrap every description according to the *actual available width*.
+        if mode=='grid':
+            card_width=max(300,(width-78)//2)
+        else:
+            card_width=max(310,width-70)
+        inner=max(210,card_width-48)
+        rows=2 if height<800 else 3
+        self.folders.configure(height=rows)
+        self.preferred_list.configure(height=rows)
+        self.excluded_list.configure(height=rows)
+        self.preferred_hint.configure(wraplength=inner)
+        self.exclude_hint.configure(wraplength=inner)
+        self.exclusion_skip_check.configure(state='normal' if self.mode is None else 'disabled')
+        self._layout_media_options(wide=(mode=='tabs' and (width>=1060 or height<770)))
+        label_width=max(160,((inner-28)//2 if mode=='tabs' and (width>=1060 or height<770) else inner-28))
+        for _,lab in self.media_rows:lab.configure(wraplength=label_width)
+        self.media_hint.configure(wraplength=inner)
+        self.summary_label.configure(wraplength=max(180,width-375))
+        self.progress_label.configure(wraplength=max(180,width-55))
+        # Important actions stay visible; rarely used commands move to
+        # discoverable More menus at small widths, rather than consuming rows.
+        compact_toolbar=width<1170
+        if getattr(self,'_compact_toolbar',None)!=compact_toolbar:
+            self._compact_toolbar=compact_toolbar
+            for b in [*self.toolbar_buttons,self.scan_more]:b.grid_forget()
+            tools=self.scan.master
+            for i in range(7):tools.columnconfigure(i,weight=0,uniform='')
+            if compact_toolbar:
+                visible=[self.scan,self.history_btn,self.stop,self.kill,self.scan_more]
+            else:
+                visible=self.toolbar_buttons
+            for i,b in enumerate(visible):
+                b.grid(row=0,column=i,sticky='ew',padx=(0,6))
+                tools.columnconfigure(i,weight=1,uniform='tools')
+        compact_actions=width<1230
+        if getattr(self,'_compact_actions',None)!=compact_actions:
+            self._compact_actions=compact_actions
+            for b in [*self.action_buttons,self.action_more]:b.grid_forget()
+            tools=self.smart.master
+            for i in range(8):tools.columnconfigure(i,weight=0,uniform='')
+            if compact_actions:
+                visible=[self.smart,self.trash,self.action_more]
+            else:
+                visible=self.action_buttons
+            for i,b in enumerate(visible):
+                b.grid(row=0,column=i,sticky='ew',padx=(0,6))
+                tools.columnconfigure(i,weight=1,uniform='tools')
+        self.tree.column('#0',width=185 if width<1000 else 260)
+        self.tree.column('quality',width=115 if width<1000 else 175)
     def _toggle_settings(self):
         # Backwards-compatible entry point for former UI automation.
         self._select_card((self.active_card+1)%4)
@@ -611,6 +688,8 @@ class App:
             x.configure(state='disabled' if busy else 'normal')
         self.stop.configure(state='normal' if busy else 'disabled')
         self.kill.configure(state='normal' if busy else 'disabled')
+        self.scan_more.configure(state='disabled' if busy else 'normal')
+        self.action_more.configure(state='disabled' if busy else 'normal')
         if not busy: self.pb['value']=0
 
     def _launch(self,mode,payload):
@@ -796,6 +875,8 @@ class App:
 
     def _render(self):
         self.filter_job=None
+        self._layout_pending=None
+        self._layout_mode=None
         self.more.grid_remove()
         self.tree.delete(*self.tree.get_children())
         self.item_map.clear()
@@ -1035,6 +1116,9 @@ class App:
                 self.proc.terminate()
                 self.proc.join(timeout=1.0)
                 if self.proc.is_alive(): self.proc.kill()
+        if getattr(self,'_layout_pending',None):
+            try:self.root.after_cancel(self._layout_pending)
+            except tk.TclError:pass
         if getattr(self,'_poll_after',None):
             try:self.root.after_cancel(self._poll_after)
             except tk.TclError: pass

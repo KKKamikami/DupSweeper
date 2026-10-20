@@ -16,16 +16,17 @@ DupSweeper helps reclaim disk space by finding **exact duplicate files**, **dupl
 - **Smart selection:** keep a preferred copy using multiple priority folders and media quality; configure trusted photo and video selection separately.
 - **Scan history:** revisit previously detected groups; run a full scan to discover newly added files.
 - **Safe disk cleanup:** review before moving candidates to the system Trash. Supports force stop and CSV export.
+- **Adaptive desktop interface:** settings use clear tabs on compact windows and 2×2 cards on large displays. Text wraps automatically and no settings sidebar scroll is required.
 - **Local-first:** no account, cloud scan, or file upload is required.
 
 ### Downloads
 
 | Operating system | Release file |
 |---|---|
-| Windows x64 (Traditional Chinese) | `DupSweeper_Windows_x64_zh-TW_v1.3.0.exe` |
-| Windows x64 (English) | `DupSweeper_Windows_x64_en_v1.3.0.exe` |
-| macOS (Apple Silicon / Intel) | `DupSweeper_macOS_v1.3.0.zip` |
-| Ubuntu | `DupSweeper_Ubuntu_v1.3.0.deb` |
+| Windows x64 (Traditional Chinese) | `DupSweeper_Windows_x64_zh-TW_v1.4.0.exe` |
+| Windows x64 (English) | `DupSweeper_Windows_x64_en_v1.4.0.exe` |
+| macOS (Apple Silicon / Intel) | `DupSweeper_macOS_v1.4.0.zip` |
+| Ubuntu | `DupSweeper_Ubuntu_v1.4.0.deb` |
 
 Download the files under [Releases](https://github.com/KKKamikami/DupSweeper/releases) **after the builds succeed**. The GitHub project ZIP contains source code, not a Windows executable.
 
@@ -58,6 +59,7 @@ DupSweeper 是一款**重複檔案搜尋、重複照片比對與相似影片整�
 - **智慧保留**：支援多個優先保留資料夾，依畫質建議保留版本；照片及影片可分開設定信任智慧選取。
 - **歷史快速檢查**：加速處理已知重複群組；找新檔案仍需完整重新掃描。
 - **安全整理硬碟**：人工總確認後移至回收桶，支援強制停止與 CSV 匯出。
+- **自動調整介面**：小視窗使用可切換的設定分頁，大型視窗使用 2×2 卡片；說明文字自動換行。
 
 ### 下載
 
@@ -81,3 +83,4 @@ DupSweeper 是一款**重複檔案搜尋、重複照片比對與相似影片整�
 需要 Python 3.10 以上、Tkinter、Pillow、Send2Trash；相似影片功能另需 FFmpeg／FFprobe。執行 `python dupsweeper.py`，英文介面使用 `python dupsweeper.py --lang en`。
 
 **Keywords:** duplicate file finder, duplicate photo finder, duplicate video finder, disk cleanup, file deduplication, SHA-256, perceptual hashing, FFmpeg, local file manager, Windows, macOS, Ubuntu, 重複檔案, 重複照片, 相似影片, 硬碟清理, 智慧選取。
+
