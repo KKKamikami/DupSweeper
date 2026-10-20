@@ -1,0 +1,4 @@
+# Build these on the target OS so PyInstaller includes a compatible Python runtime.
+pyinstaller>=6.11,<7
+Pillow>=10,<13
+Send2Trash>=1.8,<2
