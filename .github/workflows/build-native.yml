@@ -1,4 +1,4 @@
-name: Build three operating-system Release assets
+name: Build DupSweeper 1.2.0 desktop releases
 
 on:
   workflow_dispatch:
@@ -11,40 +11,53 @@ jobs:
     name: Test core logic on Ubuntu
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install test dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3-tk ffmpeg
+          sudo apt-get install -y python3-tk ffmpeg xvfb
           python -m pip install pytest Pillow Send2Trash
       - name: Run unit tests
         run: python -m pytest -q tests
+      - name: Test Chinese and English layouts
+        run: xvfb-run -a python tests/gui_new_layout_smoke.py
 
   windows:
-    name: Build Windows x64 EXE
+    name: Build Windows EXE in zh-TW and en
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Build Windows executable with FFmpeg
+      - name: Package Chinese and English Windows executables
         shell: pwsh
         run: ./packaging/build_windows.ps1
-      - name: Check frozen executable and bundled media tools
+      - name: Verify both self-contained binaries
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath (Resolve-Path './dist/DupSweeper.exe').Path -ArgumentList '--self-test' -Wait -PassThru
-          if ($proc.ExitCode -ne 0) { throw "Windows executable self-test failed: $($proc.ExitCode)" }
-      - uses: actions/upload-artifact@v4
+          foreach ($file in @('DupSweeper_zh-TW.exe','DupSweeper_en.exe')) {
+            $exe = (Resolve-Path "./dist/$file").Path
+            $proc = Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru
+            if ($proc.ExitCode -ne 0) { throw "$file self-test failed: $($proc.ExitCode)" }
+          }
+      - name: Sign both executables (only if certificate secrets exist)
+        shell: pwsh
+        env:
+          WINDOWS_SIGN_PFX_BASE64: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 }}
+          WINDOWS_SIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGN_PFX_PASSWORD }}
+        run: ./packaging/sign_windows.ps1
+      - uses: actions/upload-artifact@v6
         with:
           name: native-windows
-          path: dist/DupSweeper.exe
+          path: |
+            dist/DupSweeper_zh-TW.exe
+            dist/DupSweeper_en.exe
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
   macos:
     name: Build macOS ${{ matrix.arch }} APP
@@ -60,67 +73,67 @@ jobs:
             upload: native-mac-intel
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Build and bundle APP with FFmpeg
+      - name: Build APP with embedded FFmpeg
         run: bash packaging/build_macos.sh
-      - name: Verify bundled app and media tools
+      - name: Verify macOS app
         run: dist/DupSweeper.app/Contents/MacOS/DupSweeper --self-test
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.upload }}
           path: release/DupSweeper_macOS.zip
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
   ubuntu:
-    name: Build Ubuntu DEB
+    name: Build and test Ubuntu DEB
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - name: Build Debian package
+      - uses: actions/checkout@v6
+      - name: Package Debian app
         run: bash packaging/build_ubuntu.sh
-      - name: Install and test package in an Ubuntu environment
+      - name: Install and test on Ubuntu
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ./release/DupSweeper_Ubuntu_all_v1.1.1.deb
+          sudo apt-get install -y ./release/DupSweeper_Ubuntu_all_v1.2.0.deb
           /usr/bin/dupsweeper --self-test
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: native-ubuntu
-          path: release/DupSweeper_Ubuntu_all_v1.1.1.deb
+          path: release/DupSweeper_Ubuntu_all_v1.2.0.deb
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
   release-assets:
-    name: Assemble exactly 3 downloadable assets
+    name: Assemble 4 downloadable release files
     needs: [unit-tests, windows, macos, ubuntu]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
         with:
           name: native-windows
           path: downloads/windows
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: native-mac-arm
           path: downloads/mac_arm
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: native-mac-intel
           path: downloads/mac_intel
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: native-ubuntu
           path: downloads/ubuntu
-      - name: Create three asset files
+      - name: Assemble four Release assets
         run: python3 packaging/assemble_release.py --inputs downloads --output release-assets
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
-          name: DupSweeper_Release_v1.1.1
+          name: DupSweeper_Release_v1.2.0
           path: release-assets/*
           if-no-files-found: error
           retention-days: 30

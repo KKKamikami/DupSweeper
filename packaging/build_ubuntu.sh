@@ -21,7 +21,7 @@ Description: Local duplicate-file organizer and visual similarity checker
  DupSweeper compares exact duplicates and similar photos/videos locally,
  offers priority folders and safe selection, and moves reviewed files to Trash.
 CONTROL
-install -m 0644 dupsweeper_engine.py dupsweeper.py dupsweeper_history.py "$STAGE/usr/share/dupsweeper/"
+install -m 0644 dupsweeper_engine.py dupsweeper.py dupsweeper_history.py dupsweeper_i18n.py "$STAGE/usr/share/dupsweeper/"
 install -m 0644 README.md "$STAGE/usr/share/doc/dupsweeper/README.md"
 install -m 0644 assets/dupsweeper.png "$STAGE/usr/share/icons/hicolor/256x256/apps/dupsweeper.png"
 cat > "$STAGE/usr/bin/dupsweeper" <<'LAUNCH'

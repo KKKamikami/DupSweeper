@@ -14,6 +14,7 @@ python3 -m PyInstaller --noconfirm --clean --windowed --onedir \
   --collect-all PIL \
   --hidden-import dupsweeper_engine \
   --hidden-import dupsweeper_history \
+  --hidden-import dupsweeper_i18n \
   dupsweeper.py
 codesign --force --deep --sign - dist/DupSweeper.app
 # Keep the .app resource fork/permissions intact in a portable ZIP.

@@ -1,12 +1,12 @@
-# DupSweeper — Changelog
+# Changelog
+
+## v1.2.0
+- Responsive pastel cards and visible tabs without a settings-side scrollbar.
+- Windows process DPI awareness and improved typography.
+- Image-based checked indicator with a visible check mark.
+- Fully separate Windows Chinese and English EXE build entrypoints.
+- Node.js 24-compatible GitHub Actions and optional Windows Authenticode signing.
+- Existing exact/hash matching, similar-media trust controls, trash checks and history preserved.
 
 ## v1.1.1
-- Renamed the main application, engine, and history modules to DupSweeper.
-- Fixed macOS GitHub Actions builds by running the shell script with `bash` instead of relying on executable file permissions.
-- Added DupSweeper app icons for Windows and macOS builds.
-- Updated README and release assets to the DupSweeper name.
-- New local history/cache directory: `DupSweeper` (fresh full scan recommended).
-
-## v1.1.0
-- Separate trusted smart selection for visually similar photos and videos.
-- Retention priorities and local scan history.
+- Renamed all primary DupSweeper modules; macOS script permissions fix.

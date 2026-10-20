@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_application_brand_and_release_names():
     gui = (ROOT / 'dupsweeper.py').read_text(encoding='utf-8')
-    assert "root.title('DupSweeper" in gui
+    assert "root.title(T('DupSweeper" in gui
     assert "text='DupSweeper'" in gui
     for name in ('packaging/build_windows.ps1', 'packaging/build_macos.sh',
                  'packaging/build_ubuntu.sh', 'packaging/assemble_release.py',

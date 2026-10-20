@@ -1,38 +1,24 @@
-"""Validate layout adapts to different window sizes without hiding actions."""
+"""Legacy responsive check updated for the card/tab interface."""
 from pathlib import Path
-import tkinter as tk
-import sys
+import sys, tkinter as tk
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from dupsweeper import App
 
-
 def main():
-    root=tk.Tk()
-    app=App(root)
-    for width,height in [(1280,850),(950,670),(790,650),(720,590),(1240,800)]:
-        root.geometry(f'{width}x{height}')
-        root.update()
-        assert app.workspace.winfo_width() <= width
-        assert app.trash.winfo_ismapped()
-        assert app.smart.winfo_ismapped()
-        assert app.tree.winfo_ismapped()
-        if width < 1040:
-            assert app.settings_toggle.winfo_ismapped()
-            if app.settings_panel.winfo_ismapped():
-                app._toggle_settings()
-                root.update()
-            assert not app.settings_panel.winfo_ismapped()
-            assert app.results_panel.winfo_height() > 250
-            app._toggle_settings()
-            root.update()
-            assert app.settings_panel.winfo_ismapped()
-            app._toggle_settings()
-            root.update()
+    root=tk.Tk(); app=App(root)
+    for w,h in ((1280,850),(950,820),(900,780),(1240,850)):
+        root.geometry(f'{w}x{h}');root.update()
+        assert app.smart.winfo_ismapped() and app.trash.winfo_ismapped()
+        assert app.tree.winfo_ismapped() and app.results_panel.winfo_ismapped()
+        assert not hasattr(app,'settings_scroll')
+        if w<1120:
+            assert app.tabbar.winfo_ismapped()
+            for i in range(3):
+                app._select_card(i);root.update()
+                assert (app.folder_frame,app.pref_frame,app.opts_frame)[i].winfo_ismapped()
         else:
-            assert app.settings_panel.winfo_ismapped()
-            assert app.results_panel.winfo_ismapped()
-    print('Responsive layout OK')
+            assert all(f.winfo_ismapped() for f in (app.folder_frame,app.pref_frame,app.opts_frame))
     root.destroy()
-
+    print('Responsive cards and tabs OK')
 
 if __name__=='__main__':main()

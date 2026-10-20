@@ -1,109 +1,81 @@
 # DupSweeper
 
-**Version 1.1.1** · [Releases](https://github.com/KKKamikami/DupSweeper/releases)
+**v1.2.0** · [Releases](https://github.com/KKKamikami/DupSweeper/releases) · [English](#english) | [繁體中文](#繁體中文)
 
-[English](#english-documentation) | [繁體中文](#中文說明)
+## English
 
----
+DupSweeper is an offline desktop duplicate-file organizer for Windows, macOS, and Ubuntu. It uses full SHA-256 for exact duplicates and local photo/video signatures to suggest visually similar media. All removal decisions require final confirmation and use the system Trash where available.
 
-## English Documentation
+### What's new in v1.2.0
 
-DupSweeper is a cross-platform GUI tool for finding exact duplicate files and visually similar photos or videos. It recommends which versions to keep and processes scans locally. Files are moved to Trash only after your confirmation.
+- **Clearer, responsive interface:** muted pastel cards; no scrollable left settings pane. On narrow screens, use the clearly labeled Scan, Preferred and Media tabs.
+- **High-DPI improvements:** Windows DPI awareness and larger, sharper fonts.
+- **Proper checked icon:** selectable media options show a visible white check mark rather than an X.
+- **Separate English Windows executable:** native English buttons, messages, status, and columns. Traditional Chinese remains available separately.
+- **Signing-ready workflow:** optional certificate-based Authenticode signing. An unsigned EXE may trigger Microsoft Defender SmartScreen; signatures do not guarantee immediate reputation.
 
-### Project Files Description
+### Downloads
 
-| File or Folder | Description |
-| :--- | :--- |
-| `dupsweeper.py` | Main graphical user interface and entry point |
-| `dupsweeper_engine.py` | Duplicate detection, hashing, photo analysis and video frame signatures |
-| `dupsweeper_history.py` | Local SQLite scan-history database |
-| `packaging/` | Build scripts for Windows, macOS and Ubuntu |
-| `.github/workflows/` | GitHub Actions builds for the three operating systems |
-| `tests/` | Automated tests |
-| `requirements-build.txt` | Dependencies for building standalone applications |
+After [GitHub Actions](https://github.com/KKKamikami/DupSweeper/actions) successfully builds the release, find these files under [Releases](https://github.com/KKKamikami/DupSweeper/releases):
 
-### How the Program Works
+| System | Release asset |
+|---|---|
+| Windows x64 — Traditional Chinese | `DupSweeper_Windows_x64_zh-TW_v1.2.0.exe` |
+| Windows x64 — English | `DupSweeper_Windows_x64_en_v1.2.0.exe` |
+| macOS — Intel and Apple Silicon | `DupSweeper_macOS_v1.2.0.zip` |
+| Ubuntu — DEB package | `DupSweeper_Ubuntu_v1.2.0.deb` |
 
-* **Multi-Stage Filtering** Groups by file size, compares partial samples, then uses full SHA-256 hashes to confirm exact duplicates, even when filenames differ.
-* **Smart Media Analysis** Uses Pillow and FFmpeg/FFprobe to compare image or video-frame signatures. Visually similar files are candidates, not proof that audio, subtitles or edits match.
-* **Local Scan History** Saves completed scan results and caches locally. Quick history checks revisit known duplicate groups; a full rescan is needed to discover new files.
-* **Smart Retention Rules** Prioritizes your chosen folders, then considers image or video quality to recommend one version to keep. Similar photos and videos have separate, optional trusted auto-selection switches.
+Windows EXEs bundle Python, Pillow and FFmpeg. The Ubuntu DEB uses system dependencies. The macOS ZIP contains separate Intel and Apple Silicon APP archives. They should be tested on their respective target systems after each build.
 
-### Installation and Operation
+### Usage
 
-#### 1. Standalone Installation for General Users
+1. Add scan locations; optionally set multiple preferred folders.
+2. Choose **Full Rescan** for new files; **Quick History Check** only examines known duplicate groups.
+3. Enable **visual similarity analysis** if desired. You may separately trust Smart Select for photos/images and videos.
+4. Use **Smart Select** or manually mark copies; confirm once before moving anything to Trash.
+5. Important: visual similarity is not byte equality. Similar videos may differ in audio, subtitles or edits. Back up important files.
 
-Download a **successfully built** package from [Releases](https://github.com/KKKamikami/DupSweeper/releases):
+### Run from source
 
-* **Windows 10/11 (x64)** — `DupSweeper_Windows_x64_v1.1.1.exe`: download and double-click. No separate Python installation is needed.
-* **macOS (Apple Silicon / Intel)** — `DupSweeper_macOS_v1.1.1.zip`: extract and select the folder matching your Mac, then extract and open `DupSweeper.app`. The unsigned/not-notarized application may require approval under System Settings → Privacy & Security.
-* **Ubuntu** — `DupSweeper_Ubuntu_v1.1.1.deb`: install with your package manager. Installation may require downloading system dependencies.
+Install Python 3.10+, Tkinter, Pillow, Send2Trash and FFmpeg. Run `python dupsweeper.py --lang en` (English) or `python dupsweeper.py` (Traditional Chinese).
 
-> Release assets are available only after the corresponding GitHub Actions builds succeed. Scanning local files does not require uploading them to a server.
+## 繁體中文
 
-#### 2. Run from Source for Developers
+DupSweeper 是支援 Windows、macOS、Ubuntu 的本機重複檔案整理工具，使用 SHA-256 辨識內容完全相同的檔案，並可分析相似照片及影片。刪除候選檔案前會再次確認，採用移至系統回收桶方式處理。
 
-* Install Python 3.10 or newer and Tkinter, then run `python -m pip install Pillow Send2Trash`. Install FFmpeg/FFprobe for similar-video analysis.
-* Run `python dupsweeper.py` to open the GUI.
-* Packaging dependencies: `python -m pip install -r requirements-build.txt`.
+### v1.2.0 更新內容
 
-#### 3. Five Operation Steps
+- **重新設計介面**：低飽和馬卡龍色、清楚的資訊卡片；不再使用會隱藏選項的左側設定捲軸。窄視窗改為「掃描位置／優先保留／相似媒體」分頁。
+- **高清晰度文字**：Windows 高 DPI 支援、更適合閱讀的字型及間距。
+- **清楚的勾選**：改用勾勾圖示，不再使用容易誤會的 X。
+- **Windows 雙語版本**：繁中與英文分別打包，英文版的控制項與主要對話框均為英文。
+- **正式簽署支援**：GitHub Actions 可選用程式碼簽署憑證；未簽署的 EXE 可能受到 SmartScreen 警告，數位簽署也不能保證立刻消除警告。
 
-1. **Add Scan Locations** — Select drives or folders. Expand Settings if the window is narrow.
-2. **Set Priority Folders** — Optionally add multiple folders whose files should be retained first.
-3. **Choose Scan Mode** — Run a Full Rescan initially; Quick History Check revisits known groups. Run full scans periodically for newly added files.
-4. **Smart Selection** — Review results or independently enable trusted auto-selection for similar photos/images and similar videos. Files with the same name but different contents are only flagged.
-5. **Confirm Cleanup** — Check the selected files and confirm once to move duplicates to Trash. Similarity matching may be imperfect, so back up important files.
+### 下載檔案
 
----
+| 系統 | 檔案 |
+|---|---|
+| Windows x64 繁體中文 | `DupSweeper_Windows_x64_zh-TW_v1.2.0.exe` |
+| Windows x64 English | `DupSweeper_Windows_x64_en_v1.2.0.exe` |
+| macOS Apple Silicon／Intel | `DupSweeper_macOS_v1.2.0.zip` |
+| Ubuntu | `DupSweeper_Ubuntu_v1.2.0.deb` |
 
-## 中文說明
+下載前請確定 GitHub Actions 已成功建置。macOS ZIP 內有兩種晶片的 APP 壓縮包，Ubuntu 安裝時會透過系統套件管理員安裝依賴。
 
-**DupSweeper v1.1.1** 是跨平台的重複檔案搜尋與整理工具，支援找出內容完全相同的檔案、相似照片及影片，並智慧建議保留最佳版本。所有掃描皆在本機完成，移至回收桶前一定會請你確認。
+### 使用方法
 
-### 檔案結構描述
+1. 加入要掃描的硬碟或資料夾，並可指定多個優先保留資料夾。
+2. 首次請用「完整重新掃描」；「歷史快速檢查」只檢查過去已知的群組。
+3. 可以分別選擇是否信任智慧選取相似照片與相似影片。
+4. 智慧選取後確認標記，再執行「移至回收桶」。
+5. 相似影片可能含不同音訊、字幕或剪輯，仍有誤判風險，請先備份重要檔案。
 
-| 檔案或資料夾名稱 | 功能說明 |
-| :--- | :--- |
-| `dupsweeper.py` | 圖形介面主程式與啟動入口 |
-| `dupsweeper_engine.py` | 精確比對、圖片相似分析與影片影格特徵 |
-| `dupsweeper_history.py` | 本機 SQLite 歷史紀錄 |
-| `packaging/` | Windows、macOS、Ubuntu 的打包腳本 |
-| `.github/workflows/` | GitHub Actions 三平台自動建置 |
-| `tests/` | 自動化測試 |
-| `requirements-build.txt` | 建立獨立執行檔所需的套件 |
+### 原始碼啟動
 
-### 程式運作原理
+安裝 Python 3.10 以上、Tkinter、Pillow、Send2Trash、FFmpeg，執行 `python dupsweeper.py`。英文介面可使用 `python dupsweeper.py --lang en`。
 
-* **多階段加速篩選**：先按檔案大小分類，再比較局部內容，最後使用完整 SHA-256 確認；不同檔名但內容完全相同也能找到。
-* **智慧影音特徵比對**：利用 Pillow 和 FFmpeg/FFprobe 比對圖片或影片影格。視覺相似不代表音軌、字幕或剪輯完全相同，仍可能誤判。
-* **本機歷史紀錄**：儲存完成的掃描結果與快取。歷史快速檢查只核對已知群組，想找新檔案仍需完整重新掃描。
-* **智慧保留機制**：優先保留指定的多個資料夾，再依品質挑選最佳版本；**相似照片／圖片**與**相似影片**可分別設定是否信任智慧選取。
+### 打包與發布
 
-### 程式安裝與操作方式
+手動上傳整個專案（含 `.github/workflows/build-native.yml`）至 GitHub，於 **Actions → Build DupSweeper 1.2.0 desktop releases → Run workflow** 進行跨平台建置。下載 `DupSweeper_Release_v1.2.0` Artifact，解壓後將 4 個檔案放入 Releases `v1.2.0`。
 
-#### 1. 一般使用者免編譯版本
-
-請至 [Releases 下載頁面](https://github.com/KKKamikami/DupSweeper/releases) 選擇**已成功建置**的系統版本：
-
-* **Windows 10/11（x64）**：下載 `DupSweeper_Windows_x64_v1.1.1.exe`，雙擊即可啟動，不必另外安裝 Python。
-* **macOS（Apple Silicon／Intel）**：下載 `DupSweeper_macOS_v1.1.1.zip`，解壓後選擇對應晶片版本，開啟 `DupSweeper.app`。尚未經 Apple 公證，首次啟動可能需要到「系統設定 → 隱私權與安全性」允許。
-* **Ubuntu**：下載 `DupSweeper_Ubuntu_v1.1.1.deb`，使用套件管理工具安裝；首次安裝可能需要下載相依套件。
-
-> 發行資產需在 GitHub Actions 建置成功後才會出現。掃描本機檔案不會主動上傳雲端。
-
-#### 2. 開發者原始碼執行方式
-
-* 安裝 Python 3.10 以上及 Tkinter，執行 `python -m pip install Pillow Send2Trash`。相似影片比對另需 FFmpeg／FFprobe。
-* 執行 `python dupsweeper.py` 開啟圖形介面。
-* 打包時可執行 `python -m pip install -r requirements-build.txt`。
-
-#### 3. 五個操作步驟
-
-1. **加入掃描位置**：選擇硬碟或資料夾；視窗較窄時可展開設定。
-2. **設定優先保留資料夾**：可加入多個資料夾，優先保留其中品質較佳的版本。
-3. **選擇掃描方式**：首次使用完整重新掃描；歷史快速檢查只處理已知群組，建議定期完整重掃。
-4. **智慧選取**：檢查結果，或分別開啟「智慧選取相似照片／圖片」與「智慧選取相似影片」的信任選項。同名但內容不同只會標示，不會直接列為可刪副本。
-5. **確認安全清理**：確認標記後，再將不需要的副本移至回收桶。相似辨識不是百分之百準確，重要檔案請先備份。
-
-**資料位置：** 此版的歷史與快取儲存在 DupSweeper 專屬本機資料夾；由其他產品資料夾搬遷時需重新進行完整掃描。
+**注意：** 專案 ZIP 是開發者程式包，不是 Windows EXE。Windows 與 macOS 原生執行檔需由對應系統的 GitHub runner 建立並檢驗。
