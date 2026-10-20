@@ -3,7 +3,7 @@ from pathlib import Path
 import tkinter as tk
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from duplicate_finder import App
+from dupsweeper import App
 
 
 def main():

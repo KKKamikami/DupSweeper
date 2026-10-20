@@ -4,7 +4,7 @@ import threading
 from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-import duplicate_engine as e
+import dupsweeper_engine as e
 
 
 def test_identical_different_names_and_extensions(tmp_path):
@@ -77,7 +77,7 @@ def test_video_signature_different_duration_rejected():
 
 
 def test_reject_all_selected_even_with_multi_membership(tmp_path):
-    import duplicate_finder as ui
+    import dupsweeper as ui
     a=e.FileInfo(str(tmp_path/'1.mp4'),3,1,0,0)
     b=e.FileInfo(str(tmp_path/'2.mp4'),3,1,0,0)
     group=e.Group('exact',[a,b],key='dummy')

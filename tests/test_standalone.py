@@ -1,13 +1,11 @@
 from pathlib import Path
-import duplicate_engine as engine
-import history_store as history
+import dupsweeper_engine as engine
+import dupsweeper_history as history
 
 
 def test_storage_namespaces_independent():
-    assert 'FileTidyFinal' in str(history.storage_path())
-    assert 'FileTidyFinal' in str(engine.cache_file())
-    assert 'DuplicateFinderV3' not in str(history.storage_path())
-    assert 'DuplicateFinderV4' not in str(engine.cache_file())
+    assert 'DupSweeper' in str(history.storage_path())
+    assert 'DupSweeper' in str(engine.cache_file())
 
 
 def test_only_markdown_readme():

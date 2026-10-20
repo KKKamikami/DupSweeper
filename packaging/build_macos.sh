@@ -7,15 +7,16 @@ command -v ffmpeg >/dev/null || brew install ffmpeg
 command -v ffprobe >/dev/null || brew install ffmpeg
 python3 -m pip install --disable-pip-version-check -r requirements-build.txt
 python3 -m PyInstaller --noconfirm --clean --windowed --onedir \
-  --name FileTidy \
+  --name DupSweeper \
+  --icon assets/dupsweeper.icns \
   --add-binary "$(command -v ffmpeg):." \
   --add-binary "$(command -v ffprobe):." \
   --collect-all PIL \
-  --hidden-import duplicate_engine \
-  --hidden-import history_store \
-  duplicate_finder.py
-codesign --force --deep --sign - dist/FileTidy.app
+  --hidden-import dupsweeper_engine \
+  --hidden-import dupsweeper_history \
+  dupsweeper.py
+codesign --force --deep --sign - dist/DupSweeper.app
 # Keep the .app resource fork/permissions intact in a portable ZIP.
 mkdir -p release
-ditto -c -k --sequesterRsrc --keepParent dist/FileTidy.app release/FileTidy_macOS.zip
-echo 'Done: release/FileTidy_macOS.zip'
+ditto -c -k --sequesterRsrc --keepParent dist/DupSweeper.app release/DupSweeper_macOS.zip
+echo 'Done: release/DupSweeper_macOS.zip'

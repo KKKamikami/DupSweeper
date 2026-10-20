@@ -1,57 +1,126 @@
-name: Build one-click Windows and macOS apps
+name: Build three operating-system Release assets
+
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'final-*'
+
 permissions:
   contents: read
+
 jobs:
+  unit-tests:
+    name: Test core logic on Ubuntu
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-tk ffmpeg
+          python -m pip install pytest Pillow Send2Trash
+      - name: Run unit tests
+        run: python -m pytest -q tests
+
   windows:
+    name: Build Windows x64 EXE
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Build executable with Pillow and verified FFmpeg
+      - name: Build Windows executable with FFmpeg
         shell: pwsh
         run: ./packaging/build_windows.ps1
-      - name: Verify executable on Windows
+      - name: Check frozen executable and bundled media tools
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath (Resolve-Path './dist/FileTidy.exe').Path -ArgumentList '--self-test' -Wait -PassThru
-          if ($proc.ExitCode -ne 0) { throw "Bundled self-test failed: $($proc.ExitCode)" }
-      - name: Upload Windows executable
-        uses: actions/upload-artifact@v4
+          $proc = Start-Process -FilePath (Resolve-Path './dist/DupSweeper.exe').Path -ArgumentList '--self-test' -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Windows executable self-test failed: $($proc.ExitCode)" }
+      - uses: actions/upload-artifact@v4
         with:
-          name: FileTidy_Windows_EXE
-          path: dist/FileTidy.exe
+          name: native-windows
+          path: dist/DupSweeper.exe
           if-no-files-found: error
+          retention-days: 7
+
   macos:
+    name: Build macOS ${{ matrix.arch }} APP
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-15
+          - runner: macos-15
             arch: AppleSilicon
-          - os: macos-15-intel
+            upload: native-mac-arm
+          - runner: macos-15-intel
             arch: Intel
-    runs-on: ${{ matrix.os }}
+            upload: native-mac-intel
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install build dependencies
-        run: brew install ffmpeg
-      - name: Build macOS .app
-        run: ./packaging/build_macos.sh
-      - name: Verify app on macOS
-        run: dist/FileTidy.app/Contents/MacOS/FileTidy --self-test
-      - name: Upload macOS application
-        uses: actions/upload-artifact@v4
+      - name: Build and bundle APP with FFmpeg
+        run: bash packaging/build_macos.sh
+      - name: Verify bundled app and media tools
+        run: dist/DupSweeper.app/Contents/MacOS/DupSweeper --self-test
+      - uses: actions/upload-artifact@v4
         with:
-          name: FileTidy_macOS_${{ matrix.arch }}_APP
-          path: release/FileTidy_macOS.zip
+          name: ${{ matrix.upload }}
+          path: release/DupSweeper_macOS.zip
           if-no-files-found: error
+          retention-days: 7
+
+  ubuntu:
+    name: Build Ubuntu DEB
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Debian package
+        run: bash packaging/build_ubuntu.sh
+      - name: Install and test package in an Ubuntu environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ./release/DupSweeper_Ubuntu_all_v1.1.1.deb
+          /usr/bin/dupsweeper --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-ubuntu
+          path: release/DupSweeper_Ubuntu_all_v1.1.1.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  release-assets:
+    name: Assemble exactly 3 downloadable assets
+    needs: [unit-tests, windows, macos, ubuntu]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-windows
+          path: downloads/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-mac-arm
+          path: downloads/mac_arm
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-mac-intel
+          path: downloads/mac_intel
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-ubuntu
+          path: downloads/ubuntu
+      - name: Create three asset files
+        run: python3 packaging/assemble_release.py --inputs downloads --output release-assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DupSweeper_Release_v1.1.1
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 30

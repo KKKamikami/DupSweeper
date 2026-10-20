@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-import duplicate_engine as e
-import history_store as h
+import dupsweeper_engine as e
+import dupsweeper_history as h
 
 
 @pytest.fixture
