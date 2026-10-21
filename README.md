@@ -84,8 +84,12 @@ DupSweeper 是一款**重複檔案搜尋、重複照片比對與相似影片整�
 
 ---
 
-## License / 授權條款
+## License
 
-Licensed under the [MIT License](LICENSE).
+DupSweeper is licensed under the MIT License.
+
+Copyright (c) 2026 KKKamikami
+
+Original project: https://github.com/KKKamikami/DupSweeper
 
 **Keywords:** duplicate file finder, duplicate photo finder, duplicate video finder, disk cleanup, file deduplication, SHA-256, perceptual hashing, FFmpeg, local file manager, Windows, macOS, Ubuntu, 重複檔案, 重複照片, 相似影片, 硬碟清理, 智慧選取。
