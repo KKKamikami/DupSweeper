@@ -29,9 +29,16 @@ for lang in ('zh-TW','en'):
             assert all(c.winfo_ismapped() for c in (app.folder_frame,app.pref_frame,app.excludes_frame,app.opts_frame))
             assert app.folder_frame.winfo_x()==app.excludes_frame.winfo_x()
         if app._layout_mode=='tabs':app._select_card(3);root.update()
+        # Typography is OS/font dependent. A short label may legitimately
+        # render under 120px, so validate visibility and actual fit instead.
         for row,label in app.media_rows:
-            assert row.winfo_ismapped() and label.winfo_width()>=120,(lang,w,h,label.cget('text'))
-            assert int(label.cget('wraplength')) <= app.opts_frame.winfo_width(),(lang,w,h,label.cget('wraplength'),app.opts_frame.winfo_width())
+            root.update_idletasks()
+            assert row.winfo_ismapped() and label.winfo_ismapped(),(lang,w,h,label.cget('text'))
+            available=row.winfo_width()-label.winfo_x()
+            assert available>0 and label.winfo_width()>0,(lang,w,h,label.cget('text'))
+            assert label.winfo_width() <= available+2,(lang,w,h,label.cget('text'))
+            assert label.winfo_width()+2 >= min(label.winfo_reqwidth(),available),(lang,w,h,label.cget('text'))
+            assert int(label.cget('wraplength')) <= max(80,available)+3,(lang,w,h,label.cget('text'))
         app._select_card(0)
         root.update()
     app._quit()

@@ -292,6 +292,13 @@ class App:
             lab=ttk.Label(row,text=caption,style='Panel.TLabel',justify='left',wraplength=260)
             lab.grid(row=0,column=1,sticky='nw',padx=(3,0))
             lab.bind('<Button-1>',lambda event,b=chk:b.invoke())
+            # Font metrics differ across systems (notably Ubuntu CI). Keep the
+            # label's wrap width within its *actual* checkbox row at every size.
+            def fit_media_label(event, label=lab, check=chk):
+                available=max(80,event.width - check.winfo_reqwidth() - 12)
+                if int(label.cget('wraplength')) != available:
+                    label.configure(wraplength=available)
+            row.bind('<Configure>',fit_media_label,add='+')
             self.media_rows.append((row,lab))
             self.media_checks.append(chk)
         self.media_hint=ttk.Label(opts,text=T('勾選的相似類型不需逐組審核；移至回收桶仍須總確認。'),

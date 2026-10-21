@@ -1,13 +1,9 @@
 name: Build DupSweeper 1.4.0 desktop releases
 
+# Free, unsigned Windows builds are supported. Signing remains optional;
+# an unsigned build is reported honestly, but does not fail packaging.
 on:
   workflow_dispatch:
-    inputs:
-      require_signed_windows:
-        description: "Require trusted Windows signature (fail if absent)"
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -66,9 +62,7 @@ jobs:
             "- ${file}: $($status.Status)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
             if ($status.Status -ne 'Valid') {
               Write-Warning "$file is not signed with a trusted publisher certificate. SmartScreen may warn users."
-              if ('${{ inputs.require_signed_windows }}' -eq 'true') {
-                throw "Trusted Windows signing required, but $file signature is $($status.Status)"
-              }
+              "Unsigned Windows build ($file). This is expected without signing credentials; SmartScreen may warn." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
             }
           }
       - uses: actions/upload-artifact@v6
