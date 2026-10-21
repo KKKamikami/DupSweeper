@@ -82,5 +82,10 @@ DupSweeper 是一款**重複檔案搜尋、重複照片比對與相似影片整�
 
 需要 Python 3.10 以上、Tkinter、Pillow、Send2Trash；相似影片功能另需 FFmpeg／FFprobe。執行 `python dupsweeper.py`，英文介面使用 `python dupsweeper.py --lang en`。
 
-**Keywords:** duplicate file finder, duplicate photo finder, duplicate video finder, disk cleanup, file deduplication, SHA-256, perceptual hashing, FFmpeg, local file manager, Windows, macOS, Ubuntu, 重複檔案, 重複照片, 相似影片, 硬碟清理, 智慧選取。
+---
 
+## License / 授權條款
+
+Licensed under the [MIT License](LICENSE).
+
+**Keywords:** duplicate file finder, duplicate photo finder, duplicate video finder, disk cleanup, file deduplication, SHA-256, perceptual hashing, FFmpeg, local file manager, Windows, macOS, Ubuntu, 重複檔案, 重複照片, 相似影片, 硬碟清理, 智慧選取。
